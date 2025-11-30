@@ -1,0 +1,23 @@
+{
+  "document_id": "4198_4-document-CCHMC_Jr-Resident.pdf",
+  "title": "Cchmc Jr Resident",
+  "file_url": "spaces/4/content/4198/4-document-CCHMC_Jr-Resident.pdf",
+  "analysis": {
+    "keywords": [],
+    "medical_terms": [],
+    "content_type": "unknown",
+    "specialty": "unknown",
+    "urgency": "routine",
+    "description": "Medical content document"
+  },
+  "extraction_status": "framework_created",
+  "extraction_method": "manual_or_pdf_library_required",
+  "extracted_text": "",
+  "key_sections": [],
+  "medical_terms_found": [],
+  "content_type": "unknown",
+  "specialty": "unknown",
+  "urgency": "routine",
+  "extraction_notes": "TEXT EXTRACTION NOTES FOR: Cchmc Jr Resident\n\nDOCUMENT TYPE: unknown\nMEDICAL SPECIALTY: unknown\nURGENCY LEVEL: routine\n\nEXPECTED CONTENT:\n- This appears to be a unknown document\n- Medical specialty: unknown\n- Urgency: routine\n\nKEY MEDICAL TERMS TO EXTRACT:\n\n\nEXTRACTION GUIDELINES:\n1. Extract all text content accurately\n2. Preserve formatting and structure\n3. Note section headers and subsections\n4. Extract tables and lists\n5. Include references and citations\n6. Note version numbers and dates\n\nRECOMMENDED EXTRACTION METHOD:\n- Use PyPDF2 or pdfplumber for PDF files\n- Use OCR for scanned documents\n- Manual extraction for complex formatting\n- Review by medical professional for accuracy",
+  "created_at": "2025-10-03T18:56:23.329919"
+}

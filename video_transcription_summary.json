@@ -1,0 +1,22 @@
+{
+  "total_videos": 152,
+  "transcription_status": "frameworks_created",
+  "next_steps": [
+    "Implement speech-to-text service (e.g., AWS Transcribe, Google Speech-to-Text)",
+    "Use medical vocabulary for better accuracy",
+    "Manual review by medical professionals",
+    "Create timestamp annotations for key procedures"
+  ],
+  "videos_by_specialty": {
+    "surgery": 80,
+    "neonatal": 8,
+    "pediatric": 10,
+    "unknown": 42,
+    "ecmo": 12
+  },
+  "videos_by_complexity": {
+    "moderate": 126,
+    "complex": 26
+  },
+  "estimated_transcription_time": "304 hours (estimated 2 hours per video)"
+}

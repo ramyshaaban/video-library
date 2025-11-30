@@ -1,0 +1,197 @@
+{
+  "analysis_date": "2025-01-27",
+  "bucket_overview": {
+    "gcmd-production": {
+      "description": "Primary production bucket for StayCurrentMD app",
+      "total_objects": "~14,500+ files",
+      "total_size_gb": "~1,839 GB",
+      "top_level_folders": [
+        "videos/",
+        "vimeo_videos/",
+        "conferences/",
+        "Transcription/"
+      ]
+    },
+    "gcmd-testing": {
+      "description": "Testing/development bucket",
+      "top_level_folders": [
+        "videos/",
+        "dev-data/",
+        "migration-test/"
+      ]
+    }
+  },
+  "folder_structure": {
+    "gcmd-production": {
+      "videos/": {
+        "description": "Main video content folder",
+        "contents": {
+          "videos": {
+            "count": 3997,
+            "format": ".mp4",
+            "size_gb": 677.15,
+            "date_range": "2022-03-30 to 2023-02-10",
+            "naming_pattern": "Hash-based filenames (MD5/SHA-like)",
+            "example": "000a300e8f1e74ab4fec71506bea7096.mp4"
+          },
+          "thumbnails": {
+            "count": "~7,400+",
+            "formats": [".jpg", ".jpeg", ".png", ".JPG", ".PNG"],
+            "description": "Thumbnail images for videos",
+            "naming_pattern": "Same hash as corresponding video"
+          },
+          "other_files": {
+            "subtitle_files": {
+              "count": 4,
+              "formats": [".vtt", ".websrt"],
+              "description": "Video subtitle/caption files"
+            },
+            "pdf_files": {
+              "count": 7,
+              "description": "PDF documents (possibly related to videos)"
+            }
+          }
+        },
+        "organization": "Flat structure - all files in root of videos/ folder",
+        "file_association": "Videos and thumbnails share same hash-based filename (different extensions)"
+      },
+      "vimeo_videos/": {
+        "description": "Videos imported from Vimeo platform",
+        "count": 3185,
+        "size_gb": 1161.95,
+        "date_range": "2023-07-19 to 2023-07-20",
+        "note": "Bulk import happened in July 2023",
+        "naming_pattern": "Hash-based filenames (similar to videos/)",
+        "average_size_mb": 373.57,
+        "description": "Larger file sizes than main videos folder, likely higher quality"
+      },
+      "conferences/": {
+        "description": "Conference-related content",
+        "structure": {
+          "media/": "Subfolder exists but currently empty"
+        },
+        "status": "Folder structure exists but no content yet",
+        "created": "2024-07-31"
+      },
+      "Transcription/": {
+        "description": "Transcription data folder",
+        "status": "Folder exists but currently empty",
+        "created": "2024-01-03",
+        "note": "May be used for storing transcription results in the future"
+      }
+    },
+    "gcmd-testing": {
+      "videos/": {
+        "description": "Testing videos (mostly duplicates of production)",
+        "count": 3481,
+        "note": "3,434 are duplicates of production videos, 47 are unique"
+      },
+      "dev-data/": {
+        "description": "Development data",
+        "count": 4,
+        "purpose": "Development/testing data"
+      },
+      "migration-test/": {
+        "description": "Migration testing folder",
+        "count": 1,
+        "purpose": "Testing migration processes"
+      }
+    }
+  },
+  "file_naming_conventions": {
+    "video_files": {
+      "pattern": "Hash-based (32-char hex string)",
+      "example": "000a300e8f1e74ab4fec71506bea7096.mp4",
+      "purpose": "Content-addressable storage - same content = same hash",
+      "benefits": [
+        "Deduplication",
+        "Content integrity verification",
+        "Unique identification"
+      ]
+    },
+    "thumbnail_files": {
+      "pattern": "Same hash as video + image extension",
+      "example": "000a300e8f1e74ab4fec71506bea7096.jpg",
+      "association": "Thumbnails share filename with their corresponding video"
+    },
+    "special_files": {
+      "named_files": [
+        "UpdateCourseGreyBG",
+        "Screen",
+        "Sarah",
+        "Melissa",
+        "Lori",
+        "Leaning",
+        "Katie",
+        "Julianne",
+        "Gina",
+        "GCMD_Text"
+      ],
+      "note": "These appear to be special content or branding assets"
+    }
+  },
+  "content_types": {
+    "videos": {
+      "primary_format": ".mp4",
+      "count": 7182,
+      "total_size_gb": 1839.24
+    },
+    "images": {
+      "formats": [".jpg", ".jpeg", ".png", ".JPG", ".PNG"],
+      "count": "~7,400+",
+      "purpose": "Thumbnails and preview images"
+    },
+    "documents": {
+      "pdf": 7,
+      "purpose": "Supporting documents"
+    },
+    "subtitles": {
+      "formats": [".vtt", ".websrt"],
+      "count": 4,
+      "purpose": "Video captions/subtitles"
+    }
+  },
+  "storage_patterns": {
+    "organization": "Flat file structure within folders",
+    "separation": "Videos and thumbnails stored together in same folder",
+    "scalability": "Hash-based naming allows for efficient deduplication",
+    "metadata": "No separate metadata files found - likely stored in database"
+  },
+  "app_integration_notes": {
+    "staycurrentmd_app": {
+      "github": "https://github.com/GlobalCastMD/staycurrent-mobile",
+      "likely_usage": [
+        "Videos served via CloudFront or direct S3 URLs",
+        "Thumbnails for video previews",
+        "Hash-based filenames used as unique identifiers",
+        "Database likely maps hash to video metadata (title, description, etc.)"
+      ]
+    },
+    "data_flow": {
+      "upload": "Videos uploaded → Hashed → Stored in S3 with hash as filename",
+      "thumbnail": "Thumbnails generated → Stored with same hash + image extension",
+      "access": "App queries database → Gets hash → Constructs S3 URL → Serves content"
+    }
+  },
+  "insights": {
+    "content_volume": "Large medical video library (~7k unique videos)",
+    "storage_efficiency": "Hash-based naming enables deduplication",
+    "organization": "Simple flat structure - easy to manage but may need organization as it grows",
+    "transcription_status": "Transcription folder exists but empty - transcription work in progress",
+    "vimeo_migration": "Large batch of videos imported from Vimeo in July 2023",
+    "testing_environment": "Testing bucket contains mostly duplicates - good for safe testing"
+  },
+  "recommendations": {
+    "organization": [
+      "Consider subfolders by date or category if structure grows",
+      "Transcription folder ready for future use",
+      "Conferences folder structure in place for future content"
+    ],
+    "optimization": [
+      "Consider lifecycle policies for old/unused content",
+      "Implement versioning if needed for content updates",
+      "CloudFront CDN likely in use for video delivery"
+    ]
+  }
+}
+

@@ -1,0 +1,1661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StayCurrentMD Video Library</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        header {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .stats {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        .stat {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-radius: 8px;
+            flex: 1;
+            min-width: 200px;
+        }
+        .stat-label {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+        }
+        .back-button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-bottom: 20px;
+            transition: background 0.2s;
+        }
+        .back-button:hover {
+            background: #5568d3;
+        }
+        .spaces-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+            position: relative;
+            z-index: 1;
+        }
+        .space-card {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border: 2px solid transparent;
+        }
+        .space-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+            border-color: #667eea;
+        }
+        .space-card-title {
+            font-size: 22px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+            pointer-events: none;
+        }
+        .space-card-count {
+            color: #667eea;
+            font-size: 16px;
+            font-weight: 500;
+            pointer-events: none;
+        }
+        .videos-container {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .space-header {
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 15px;
+            margin-bottom: 25px;
+        }
+        .space-title {
+            font-size: 28px;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        .space-count {
+            color: #666;
+            font-size: 16px;
+        }
+        .videos-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .video-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            background: #fafafa;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        .video-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+        }
+        .video-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+        .video-description {
+            font-size: 14px;
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 15px;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            flex-grow: 1;
+        }
+        .video-meta {
+            font-size: 12px;
+            color: #999;
+            margin-top: auto;
+            padding-top: 10px;
+            border-top: 1px solid #e0e0e0;
+        }
+        .video-space-badge {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+            margin-right: 8px;
+        }
+        .video-thumbnail-container {
+            position: relative;
+            width: 100%;
+            height: 180px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            overflow: hidden;
+            background: #f0f0f0;
+        }
+        .video-thumbnail {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 6px;
+            display: block;
+            opacity: 0;
+            transition: opacity 0.4s ease-in-out;
+            cursor: pointer;
+            position: relative;
+            z-index: 2;
+            pointer-events: auto;
+        }
+        .video-thumbnail.loaded {
+            opacity: 1;
+        }
+        .video-thumbnail.loaded:hover {
+            opacity: 0.9;
+        }
+        .video-thumbnail-skeleton {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            border-radius: 6px;
+            z-index: 1;
+        }
+        @keyframes shimmer {
+            0% {
+                background-position: -200% 0;
+            }
+            100% {
+                background-position: 200% 0;
+            }
+        }
+        .video-thumbnail-skeleton.hidden {
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+            pointer-events: none;
+        }
+        .video-thumbnail-placeholder {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 6px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            color: white;
+            cursor: pointer;
+            z-index: 2;
+        }
+        .video-thumbnail-placeholder.show {
+            display: flex;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+        .video-card {
+            cursor: pointer;
+        }
+        /* Video Player Modal */
+        .video-modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            animation: fadeIn 0.3s;
+        }
+        .video-modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .video-modal-content {
+            position: relative;
+            width: 90%;
+            max-width: 1200px;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+        .video-modal-header {
+            padding: 20px;
+            background: #1a1a1a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .video-modal-title {
+            color: white;
+            font-size: 20px;
+            font-weight: 600;
+            margin: 0;
+        }
+        .video-modal-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 28px;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        .video-modal-close:hover {
+            background: rgba(255,255,255,0.1);
+        }
+        .video-player-container {
+            position: relative;
+            width: 100%;
+            background: #000;
+        }
+        .video-player {
+            width: 100%;
+            max-height: 80vh;
+            display: block;
+        }
+        .video-player-controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .video-player-container:hover .video-player-controls {
+            opacity: 1;
+        }
+        .video-control-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            transition: background 0.2s;
+        }
+        .video-control-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        .video-progress-container {
+            flex: 1;
+            height: 6px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 3px;
+            cursor: pointer;
+            position: relative;
+        }
+        .video-progress-bar {
+            height: 100%;
+            background: #667eea;
+            border-radius: 3px;
+            width: 0%;
+            transition: width 0.1s;
+        }
+        .video-time {
+            color: white;
+            font-size: 14px;
+            min-width: 100px;
+            text-align: right;
+        }
+        .video-volume-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .video-volume-slider {
+            width: 80px;
+            height: 4px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 2px;
+            cursor: pointer;
+            position: relative;
+        }
+        .video-volume-bar {
+            height: 100%;
+            background: white;
+            border-radius: 2px;
+            width: 100%;
+        }
+        .video-id {
+            font-family: monospace;
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        .search-box {
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .search-box:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+        .pagination button {
+            background: white;
+            border: 2px solid #e0e0e0;
+            padding: 10px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .pagination button:hover:not(:disabled) {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .pagination button.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        .pagination-info {
+            color: #666;
+            font-size: 14px;
+            margin: 0 10px;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-size: 18px;
+            pointer-events: none;
+        }
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .hidden {
+            display: none;
+        }
+        #search-results-view {
+            display: none;
+        }
+        /* Views are controlled by the 'hidden' class, not CSS rules */
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📚 StayCurrentMD Video Library</h1>
+            <p>Browse videos organized by medical specialty and space</p>
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-label">Total Videos</div>
+                    <div class="stat-value" id="total-videos">-</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Total Spaces</div>
+                    <div class="stat-value" id="total-spaces">-</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Last Updated</div>
+                    <div class="stat-value" style="font-size: 16px;" id="last-updated">-</div>
+                </div>
+            </div>
+            <input type="text" class="search-box" id="search-box" placeholder="Search spaces or videos...">
+        </header>
+        
+        <div id="spaces-view">
+            <div class="loading" id="spaces-loading">Loading spaces...</div>
+            <div class="spaces-grid" id="spaces-grid"></div>
+        </div>
+        
+        <div id="videos-view" class="hidden">
+            <button class="back-button" onclick="showSpaces()">← Back to Spaces</button>
+            <div class="videos-container">
+                <div class="space-header">
+                    <div class="space-title" id="current-space-title">Space Name</div>
+                    <div class="space-count" id="current-space-count">0 videos</div>
+                </div>
+                <div class="loading" id="videos-loading">Loading videos...</div>
+                <div class="videos-grid" id="videos-grid"></div>
+                <div class="pagination" id="pagination"></div>
+            </div>
+        </div>
+        
+        <div id="search-results-view" class="hidden">
+            <button class="back-button" onclick="showSpaces()">← Back to Spaces</button>
+            <div class="videos-container">
+                <div class="space-header">
+                    <div class="space-title" id="search-results-title">Search Results</div>
+                    <div class="space-count" id="search-results-count">0 videos</div>
+                </div>
+                <div class="loading" id="search-loading">Loading search results...</div>
+                <div class="videos-grid" id="search-results-grid"></div>
+                <div class="pagination" id="search-pagination"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Video Player Modal -->
+    <div id="video-modal" class="video-modal">
+        <div class="video-modal-content">
+            <div class="video-modal-header">
+                <h3 class="video-modal-title" id="video-modal-title">Video Title</h3>
+                <button class="video-modal-close" onclick="closeVideoPlayer()">&times;</button>
+            </div>
+            <div class="video-player-container">
+                <video id="video-player" class="video-player" controls>
+                    Your browser does not support the video tag.
+                </video>
+                <div class="video-player-controls">
+                    <button class="video-control-btn" id="play-pause-btn" onclick="togglePlayPause()">▶</button>
+                    <div class="video-progress-container" onclick="seekVideo(event)">
+                        <div class="video-progress-bar" id="video-progress-bar"></div>
+                    </div>
+                    <div class="video-time">
+                        <span id="video-current-time">0:00</span> / <span id="video-duration">0:00</span>
+                    </div>
+                    <div class="video-volume-container">
+                        <button class="video-control-btn" id="mute-btn" onclick="toggleMute()">🔊</button>
+                        <div class="video-volume-slider" onclick="setVolume(event)">
+                            <div class="video-volume-bar" id="video-volume-bar"></div>
+                        </div>
+                    </div>
+                    <button class="video-control-btn" onclick="toggleFullscreen()">⛶</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // State
+        let currentSpace = null;
+        let currentPage = 1;
+        let currentSearch = '';
+        let isSearchMode = false;
+        const VIDEOS_PER_PAGE = 24;
+        
+        // Initialize
+        async function init() {
+            try {
+                document.getElementById('last-updated').textContent = new Date().toLocaleDateString();
+                await loadSpaces();
+            } catch (error) {
+                console.error('Initialization error:', error);
+                document.getElementById('spaces-loading').textContent = 'Error loading spaces. Please refresh the page.';
+                document.getElementById('spaces-loading').style.color = '#c33';
+                showError('Failed to load library: ' + error.message);
+            }
+        }
+        
+        // Load spaces
+        async function loadSpaces() {
+            try {
+                document.getElementById('spaces-loading').textContent = 'Loading spaces...';
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+                
+                const response = await fetch('/api/spaces', {
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                document.getElementById('total-videos').textContent = data.total_videos;
+                document.getElementById('total-spaces').textContent = data.total_spaces;
+                
+                const grid = document.getElementById('spaces-grid');
+                grid.innerHTML = '';
+                
+                data.spaces.forEach(space => {
+                    const card = document.createElement('div');
+                    card.className = 'space-card';
+                    // Store space name in data attribute for event delegation
+                    card.setAttribute('data-space-name', space.name);
+                    card.innerHTML = `
+                        <div class="space-card-title">${escapeHtml(space.name)}</div>
+                        <div class="space-card-count">${space.video_count} videos</div>
+                    `;
+                    // Also set cursor style explicitly
+                    card.style.cursor = 'pointer';
+                    // Add both onclick (fallback) and ensure it works
+                    card.onclick = function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('Space card clicked (onclick):', space.name);
+                        showVideos(space.name);
+                        return false;
+                    };
+                    grid.appendChild(card);
+                });
+                
+                document.getElementById('spaces-loading').classList.add('hidden');
+            } catch (error) {
+                console.error('Error loading spaces:', error);
+                document.getElementById('spaces-loading').textContent = 
+                    error.name === 'AbortError' 
+                        ? 'Request timed out. Please check if the server is running.'
+                        : 'Error loading spaces: ' + error.message;
+                document.getElementById('spaces-loading').style.color = '#c33';
+                showError('Failed to load spaces: ' + error.message);
+            }
+        }
+        
+        // Show spaces view
+        function showSpaces() {
+            const spacesView = document.getElementById('spaces-view');
+            const videosView = document.getElementById('videos-view');
+            const searchResultsView = document.getElementById('search-results-view');
+            
+            spacesView.classList.remove('hidden');
+            videosView.classList.add('hidden');
+            searchResultsView.classList.add('hidden');
+            
+            // Force display to ensure it's visible
+            spacesView.style.display = 'block';
+            videosView.style.display = 'none';
+            searchResultsView.style.display = 'none';
+            
+            document.getElementById('search-box').value = '';
+            currentSearch = '';
+            currentSpace = null;
+            isSearchMode = false;
+            filterSpaces();
+        }
+        
+        // Show videos for a space
+        async function showVideos(spaceName) {
+            console.log('showVideos called with:', spaceName);
+            currentSpace = spaceName;
+            currentPage = 1;
+            currentSearch = '';
+            isSearchMode = false;
+            
+            console.log('Switching views...');
+            const spacesView = document.getElementById('spaces-view');
+            const videosView = document.getElementById('videos-view');
+            const searchResultsView = document.getElementById('search-results-view');
+            
+            spacesView.classList.add('hidden');
+            videosView.classList.remove('hidden');
+            searchResultsView.classList.add('hidden');
+            
+            // Force display to ensure it's visible
+            videosView.style.display = 'block';
+            spacesView.style.display = 'none';
+            searchResultsView.style.display = 'none';
+            
+            console.log('Spaces view hidden:', spacesView.classList.contains('hidden'));
+            console.log('Videos view hidden:', videosView.classList.contains('hidden'));
+            console.log('Videos view computed display:', window.getComputedStyle(videosView).display);
+            
+            document.getElementById('current-space-title').textContent = spaceName;
+            document.getElementById('search-box').value = '';
+            
+            await loadVideos();
+        }
+        
+        // Load videos
+        async function loadVideos() {
+            if (!currentSpace) return;
+            
+            try {
+                document.getElementById('videos-loading').classList.remove('hidden');
+                document.getElementById('videos-loading').textContent = 'Loading videos...';
+                document.getElementById('videos-grid').innerHTML = '';
+                
+                const spaceNameEncoded = encodeURIComponent(currentSpace);
+                const searchParam = currentSearch ? `&search=${encodeURIComponent(currentSearch)}` : '';
+                const url = `/api/spaces/${spaceNameEncoded}/videos?page=${currentPage}&per_page=${VIDEOS_PER_PAGE}${searchParam}`;
+                
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+                
+                const response = await fetch(url, {
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('API response received:', data);
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                document.getElementById('current-space-count').textContent = 
+                    `${data.pagination.total} videos`;
+                
+                const grid = document.getElementById('videos-grid');
+                if (!grid) {
+                    console.error('videos-grid element not found!');
+                    return;
+                }
+                grid.innerHTML = '';
+                
+                console.log('Rendering', data.videos.length, 'videos');
+                
+                if (data.videos.length === 0) {
+                    grid.innerHTML = '<div class="loading">No videos found.</div>';
+                } else {
+                    data.videos.forEach(video => {
+                        const card = createVideoCard(video);
+                        grid.appendChild(card);
+                    });
+                }
+                
+                renderPagination(data.pagination);
+                document.getElementById('videos-loading').classList.add('hidden');
+                console.log('Videos loaded and rendered');
+                
+                // Scroll to top
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            } catch (error) {
+                console.error('Error loading videos:', error);
+                document.getElementById('videos-loading').textContent = 
+                    error.name === 'AbortError' 
+                        ? 'Request timed out. Please check if the server is running.'
+                        : 'Error loading videos: ' + error.message;
+                document.getElementById('videos-loading').style.color = '#c33';
+                showError('Failed to load videos: ' + error.message);
+            }
+        }
+        
+        // Render pagination
+        function renderPagination(pagination) {
+            const paginationEl = document.getElementById('pagination');
+            paginationEl.innerHTML = '';
+            
+            if (pagination.total_pages <= 1) return;
+            
+            // Previous button
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = '← Previous';
+            prevBtn.disabled = pagination.page === 1;
+            prevBtn.onclick = () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    loadVideos();
+                }
+            };
+            paginationEl.appendChild(prevBtn);
+            
+            // Page numbers
+            const maxVisible = 7;
+            let startPage = Math.max(1, pagination.page - Math.floor(maxVisible / 2));
+            let endPage = Math.min(pagination.total_pages, startPage + maxVisible - 1);
+            
+            if (endPage - startPage < maxVisible - 1) {
+                startPage = Math.max(1, endPage - maxVisible + 1);
+            }
+            
+            if (startPage > 1) {
+                const firstBtn = document.createElement('button');
+                firstBtn.textContent = '1';
+                firstBtn.onclick = () => {
+                    currentPage = 1;
+                    loadVideos();
+                };
+                paginationEl.appendChild(firstBtn);
+                if (startPage > 2) {
+                    const ellipsis = document.createElement('span');
+                    ellipsis.textContent = '...';
+                    ellipsis.className = 'pagination-info';
+                    paginationEl.appendChild(ellipsis);
+                }
+            }
+            
+            for (let i = startPage; i <= endPage; i++) {
+                const pageBtn = document.createElement('button');
+                pageBtn.textContent = i;
+                pageBtn.className = i === pagination.page ? 'active' : '';
+                pageBtn.onclick = () => {
+                    currentPage = i;
+                    loadVideos();
+                };
+                paginationEl.appendChild(pageBtn);
+            }
+            
+            if (endPage < pagination.total_pages) {
+                if (endPage < pagination.total_pages - 1) {
+                    const ellipsis = document.createElement('span');
+                    ellipsis.textContent = '...';
+                    ellipsis.className = 'pagination-info';
+                    paginationEl.appendChild(ellipsis);
+                }
+                const lastBtn = document.createElement('button');
+                lastBtn.textContent = pagination.total_pages;
+                lastBtn.onclick = () => {
+                    currentPage = pagination.total_pages;
+                    loadVideos();
+                };
+                paginationEl.appendChild(lastBtn);
+            }
+            
+            // Next button
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Next →';
+            nextBtn.disabled = pagination.page === pagination.total_pages;
+            nextBtn.onclick = () => {
+                if (currentPage < pagination.total_pages) {
+                    currentPage++;
+                    loadVideos();
+                }
+            };
+            paginationEl.appendChild(nextBtn);
+            
+            // Page info
+            const info = document.createElement('span');
+            info.className = 'pagination-info';
+            info.textContent = `Page ${pagination.page} of ${pagination.total_pages} (${pagination.total} videos)`;
+            paginationEl.appendChild(info);
+        }
+        
+        // Filter spaces or search all videos
+        function filterSpaces() {
+            const searchTerm = document.getElementById('search-box').value.trim();
+            const cards = document.querySelectorAll('.space-card');
+            
+            if (!searchTerm) {
+                // Show all cards if search is empty
+                cards.forEach(card => {
+                    card.classList.remove('hidden');
+                    card.style.display = '';
+                });
+                // Hide search results if visible
+                const searchResultsView = document.getElementById('search-results-view');
+                if (searchResultsView && !searchResultsView.classList.contains('hidden')) {
+                    showSpaces();
+                }
+                isSearchMode = false;
+                return;
+            }
+            
+            // If search term is provided, search all videos
+            isSearchMode = true;
+            currentPage = 1;
+            currentSearch = searchTerm;
+            loadSearchResults();
+        }
+        
+        // Load search results across all videos
+        async function loadSearchResults() {
+            if (!currentSearch || !currentSearch.trim()) {
+                showSpaces();
+                return;
+            }
+            
+            try {
+                // Show search results view
+                const spacesView = document.getElementById('spaces-view');
+                const videosView = document.getElementById('videos-view');
+                const searchResultsView = document.getElementById('search-results-view');
+                
+                spacesView.classList.add('hidden');
+                videosView.classList.add('hidden');
+                searchResultsView.classList.remove('hidden');
+                
+                spacesView.style.display = 'none';
+                videosView.style.display = 'none';
+                searchResultsView.style.display = 'block';
+                
+                document.getElementById('search-results-title').textContent = `Search: "${currentSearch}"`;
+                document.getElementById('search-loading').classList.remove('hidden');
+                document.getElementById('search-loading').textContent = 'Searching videos...';
+                document.getElementById('search-results-grid').innerHTML = '';
+                
+                const searchParam = encodeURIComponent(currentSearch);
+                const url = `/api/search?page=${currentPage}&per_page=${VIDEOS_PER_PAGE}&search=${searchParam}`;
+                
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
+                
+                const response = await fetch(url, {
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Search API response:', data);
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                document.getElementById('search-results-count').textContent = 
+                    `${data.pagination.total} videos found`;
+                
+                const grid = document.getElementById('search-results-grid');
+                grid.innerHTML = '';
+                
+                if (data.videos.length === 0) {
+                    grid.innerHTML = '<div class="loading">No videos found matching your search.</div>';
+                } else {
+                    data.videos.forEach(video => {
+                        const card = createVideoCard(video);
+                        grid.appendChild(card);
+                    });
+                }
+                
+                renderSearchPagination(data.pagination);
+                document.getElementById('search-loading').classList.add('hidden');
+                console.log('Search results loaded and rendered');
+            } catch (error) {
+                console.error('Error loading search results:', error);
+                document.getElementById('search-loading').textContent = 
+                    error.name === 'AbortError' 
+                        ? 'Request timed out. Please try again.'
+                        : 'Error loading search results: ' + error.message;
+                document.getElementById('search-loading').style.color = '#c33';
+                showError('Failed to load search results: ' + error.message);
+            }
+        }
+        
+        // Render pagination for search results
+        function renderSearchPagination(pagination) {
+            const paginationEl = document.getElementById('search-pagination');
+            paginationEl.innerHTML = '';
+            
+            if (pagination.total_pages <= 1) return;
+            
+            // Previous button
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = '← Previous';
+            prevBtn.disabled = pagination.page === 1;
+            prevBtn.onclick = () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    loadSearchResults();
+                }
+            };
+            paginationEl.appendChild(prevBtn);
+            
+            // Page numbers
+            const maxVisible = 7;
+            let startPage = Math.max(1, pagination.page - Math.floor(maxVisible / 2));
+            let endPage = Math.min(pagination.total_pages, startPage + maxVisible - 1);
+            
+            if (endPage - startPage < maxVisible - 1) {
+                startPage = Math.max(1, endPage - maxVisible + 1);
+            }
+            
+            if (startPage > 1) {
+                const firstBtn = document.createElement('button');
+                firstBtn.textContent = '1';
+                firstBtn.onclick = () => {
+                    currentPage = 1;
+                    loadSearchResults();
+                };
+                paginationEl.appendChild(firstBtn);
+                if (startPage > 2) {
+                    const ellipsis = document.createElement('span');
+                    ellipsis.textContent = '...';
+                    ellipsis.className = 'pagination-info';
+                    paginationEl.appendChild(ellipsis);
+                }
+            }
+            
+            for (let i = startPage; i <= endPage; i++) {
+                const pageBtn = document.createElement('button');
+                pageBtn.textContent = i;
+                pageBtn.className = i === pagination.page ? 'active' : '';
+                pageBtn.onclick = () => {
+                    currentPage = i;
+                    loadSearchResults();
+                };
+                paginationEl.appendChild(pageBtn);
+            }
+            
+            if (endPage < pagination.total_pages) {
+                if (endPage < pagination.total_pages - 1) {
+                    const ellipsis = document.createElement('span');
+                    ellipsis.textContent = '...';
+                    ellipsis.className = 'pagination-info';
+                    paginationEl.appendChild(ellipsis);
+                }
+                const lastBtn = document.createElement('button');
+                lastBtn.textContent = pagination.total_pages;
+                lastBtn.onclick = () => {
+                    currentPage = pagination.total_pages;
+                    loadSearchResults();
+                };
+                paginationEl.appendChild(lastBtn);
+            }
+            
+            // Next button
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Next →';
+            nextBtn.disabled = pagination.page === pagination.total_pages;
+            nextBtn.onclick = () => {
+                if (currentPage < pagination.total_pages) {
+                    currentPage++;
+                    loadSearchResults();
+                }
+            };
+            paginationEl.appendChild(nextBtn);
+            
+            // Page info
+            const info = document.createElement('span');
+            info.className = 'pagination-info';
+            info.textContent = `Page ${pagination.page} of ${pagination.total_pages} (${pagination.total} videos)`;
+            paginationEl.appendChild(info);
+        }
+        
+        // Search videos
+        function searchVideos() {
+            const searchValue = document.getElementById('search-box').value.trim();
+            currentSearch = searchValue;
+            currentPage = 1;
+            console.log('Searching videos with term:', currentSearch);
+            loadVideos();
+        }
+        
+        // Create video card element
+        function createVideoCard(video) {
+            const card = document.createElement('div');
+            card.className = 'video-card';
+            
+            // Get thumbnail URL - try multiple sources
+            const thumbnailUrl = video.thumbnail || '';
+            const hasThumbnail = thumbnailUrl && !thumbnailUrl.includes('default_thumbnail');
+            const thumbnailEndpoint = `/api/video/${video.id}/thumbnail`;
+            
+            // Create thumbnail with smooth loading
+            const thumbnailContainer = document.createElement('div');
+            thumbnailContainer.className = 'video-thumbnail-container';
+            
+            // Skeleton loader
+            const skeleton = document.createElement('div');
+            skeleton.className = 'video-thumbnail-skeleton';
+            
+            // Placeholder that shows if all images fail (create first)
+            const placeholder = document.createElement('div');
+            placeholder.className = 'video-thumbnail-placeholder';
+            placeholder.innerHTML = '▶';
+            
+            // Thumbnail image
+            const thumbnailImg = document.createElement('img');
+            thumbnailImg.alt = escapeHtml(video.title);
+            thumbnailImg.className = 'video-thumbnail';
+            
+            // Track if image has loaded to prevent duplicate calls
+            let hasLoaded = false;
+            
+            // Function to hide skeleton and show image
+            const hideSkeleton = function() {
+                if (skeleton.parentNode) {
+                    skeleton.style.opacity = '0';
+                    skeleton.style.pointerEvents = 'none';
+                    setTimeout(() => {
+                        skeleton.style.display = 'none';
+                        if (skeleton.parentNode) {
+                            skeleton.parentNode.removeChild(skeleton);
+                        }
+                    }, 300);
+                }
+            };
+            
+            // Function to show the loaded image
+            const showLoadedImage = function() {
+                if (!hasLoaded) {
+                    hasLoaded = true;
+                    thumbnailImg.classList.add('loaded');
+                    hideSkeleton();
+                }
+            };
+            
+            // Handle successful load
+            thumbnailImg.onload = function() {
+                showLoadedImage();
+            };
+            
+            // Handle load error - try fallback, then show placeholder
+            thumbnailImg.onerror = function() {
+                const self = this;
+                // Try original thumbnail URL if available
+                if (thumbnailUrl && !thumbnailUrl.includes('default_thumbnail') && self.src !== thumbnailUrl) {
+                    self.src = thumbnailUrl;
+                    return; // Let the new src try to load
+                }
+                // If no fallback or fallback also fails, show placeholder
+                self.style.display = 'none';
+                hideSkeleton();
+                setTimeout(() => {
+                    placeholder.classList.add('show');
+                }, 300);
+            };
+            
+            // Set src after handlers are attached
+            thumbnailImg.src = thumbnailEndpoint;
+            
+            // Check if image is already loaded (from cache) - do this after setting src
+            setTimeout(function() {
+                if (thumbnailImg.complete) {
+                    if (thumbnailImg.naturalHeight !== 0 && !hasLoaded) {
+                        // Image already loaded from cache
+                        showLoadedImage();
+                    } else if (thumbnailImg.naturalHeight === 0) {
+                        // Image failed to load
+                        thumbnailImg.onerror();
+                    }
+                }
+            }, 0);
+            
+            // Additional check after a short delay
+            setTimeout(function() {
+                if (thumbnailImg.complete && thumbnailImg.naturalHeight !== 0 && !hasLoaded) {
+                    showLoadedImage();
+                }
+            }, 50);
+            
+            thumbnailContainer.appendChild(skeleton);
+            thumbnailContainer.appendChild(thumbnailImg);
+            thumbnailContainer.appendChild(placeholder);
+            
+            // Add thumbnail container to card
+            card.appendChild(thumbnailContainer);
+            
+            // Add other card content
+            const titleDiv = document.createElement('div');
+            titleDiv.className = 'video-title';
+            titleDiv.textContent = video.title;
+            card.appendChild(titleDiv);
+            
+            const descDiv = document.createElement('div');
+            descDiv.className = 'video-description';
+            descDiv.textContent = stripHtml(video.description || 'No description available');
+            card.appendChild(descDiv);
+            
+            const metaDiv = document.createElement('div');
+            metaDiv.className = 'video-meta';
+            if (video.space_name) {
+                const badge = document.createElement('span');
+                badge.className = 'video-space-badge';
+                badge.textContent = video.space_name;
+                metaDiv.appendChild(badge);
+            }
+            const idSpan = document.createElement('span');
+            idSpan.className = 'video-id';
+            idSpan.textContent = `ID: ${video.id} • ${video.created_at}`;
+            metaDiv.appendChild(idSpan);
+            card.appendChild(metaDiv);
+            
+            // Make card clickable
+            card.onclick = () => openVideoPlayer(video);
+            
+            return card;
+        }
+        
+        // Video player functions
+        let currentVideo = null;
+        const videoPlayer = document.getElementById('video-player');
+        const videoModal = document.getElementById('video-modal');
+        
+        async function openVideoPlayer(video) {
+            currentVideo = video;
+            document.getElementById('video-modal-title').textContent = video.title;
+            
+            // Show loading state
+            videoModal.classList.add('active');
+            videoPlayer.style.display = 'none';
+            const loadingMsg = document.createElement('div');
+            loadingMsg.id = 'video-loading-msg';
+            loadingMsg.style.cssText = 'color: white; padding: 40px; text-align: center; font-size: 18px;';
+            loadingMsg.textContent = 'Loading video...';
+            videoPlayer.parentNode.insertBefore(loadingMsg, videoPlayer);
+            
+            // Get video URL - prefer HLS, fallback to file_path
+            let videoUrl = video.hls_url;
+            
+            if (!videoUrl) {
+                // Always use proxy endpoint to handle CORS for CloudFront/S3 URLs
+                // Fetch video URL from API
+                try {
+                    const response = await fetch(`/api/video/stream/${video.id}`);
+                    const data = await response.json();
+                    
+                    if (data.video_url) {
+                        videoUrl = data.video_url;
+                        console.log('Video URL from API:', videoUrl);
+                        
+                        // If it's a CloudFront or S3 URL, use proxy instead to avoid CORS
+                        if (videoUrl.includes('cloudfront.net') || videoUrl.includes('amazonaws.com') || videoUrl.includes('s3.')) {
+                            videoUrl = `/api/video/proxy/${video.id}`;
+                            console.log('Using proxy for CloudFront/S3 URL to avoid CORS');
+                        }
+                    } else if (data.error) {
+                        throw new Error(data.message || data.error);
+                    }
+                } catch (error) {
+                    console.error('Error fetching video URL:', error);
+                    loadingMsg.innerHTML = `
+                        <p style="color: #ff6b6b; margin-bottom: 20px;">Unable to load video URL</p>
+                        <p style="font-size: 14px; color: #ccc;">${error.message}</p>
+                        <p style="font-size: 12px; color: #999; margin-top: 20px;">
+                            Please check server logs for details
+                        </p>
+                    `;
+                    return;
+                }
+            }
+            
+            if (videoUrl) {
+                // Remove loading message
+                const loadingEl = document.getElementById('video-loading-msg');
+                if (loadingEl) loadingEl.remove();
+                videoPlayer.style.display = 'block';
+                
+                // Set video source with CORS
+                videoPlayer.crossOrigin = 'anonymous';
+                
+                // Add error handler for when video fails to load
+                // Use a timeout to avoid showing errors for transient loading issues
+                let errorTimeout = null;
+                let hasShownError = false;
+                let isVideoLoading = false;
+                
+                // Track when video starts loading
+                videoPlayer.onloadstart = function() {
+                    isVideoLoading = true;
+                    console.log('Video started loading');
+                };
+                
+                // Clear any existing error messages when video loads successfully
+                videoPlayer.onloadeddata = function() {
+                    isVideoLoading = false;
+                    if (errorTimeout) {
+                        clearTimeout(errorTimeout);
+                        errorTimeout = null;
+                    }
+                    hasShownError = false;
+                    // Remove any existing error messages
+                    const existingError = document.getElementById('video-error-message');
+                    if (existingError) {
+                        existingError.remove();
+                    }
+                    videoPlayer.style.display = 'block';
+                };
+                
+                videoPlayer.oncanplay = function() {
+                    isVideoLoading = false;
+                    if (errorTimeout) {
+                        clearTimeout(errorTimeout);
+                        errorTimeout = null;
+                    }
+                    hasShownError = false;
+                    // Remove any existing error messages
+                    const existingError = document.getElementById('video-error-message');
+                    if (existingError) {
+                        existingError.remove();
+                    }
+                    videoPlayer.style.display = 'block';
+                };
+                
+                videoPlayer.onprogress = function() {
+                    // Video is actively loading data
+                    isVideoLoading = true;
+                    if (errorTimeout) {
+                        clearTimeout(errorTimeout);
+                        errorTimeout = null;
+                    }
+                };
+                
+                videoPlayer.onerror = function(e) {
+                    console.error('Video load error:', e, videoPlayer.error);
+                    
+                    // Don't show error immediately - wait and check if video is actually loading
+                    if (errorTimeout) {
+                        clearTimeout(errorTimeout);
+                    }
+                    
+                    // Check if video is actively loading or has loaded data
+                    const checkVideoState = function() {
+                        // If video is loading or has data, don't show error
+                        if (isVideoLoading || videoPlayer.readyState >= 2 || videoPlayer.networkState === 2) {
+                            console.log('Video is loading or has data, not showing error');
+                            return;
+                        }
+                        
+                        // Only show error if video truly failed after delay
+                        if (videoPlayer.error && !hasShownError) {
+                            hasShownError = true;
+                            // Hide video player
+                            videoPlayer.style.display = 'none';
+                            
+                            // Show error message
+                            const errorMsg = document.createElement('div');
+                            errorMsg.id = 'video-error-message';
+                            errorMsg.style.cssText = 'color: white; padding: 30px; text-align: center; background: rgba(255,0,0,0.15); border-radius: 8px; margin: 20px; border: 1px solid rgba(255,107,107,0.3);';
+                            
+                            let errorDetails = 'The video could not be loaded.';
+                            if (videoPlayer.error) {
+                                const error = videoPlayer.error;
+                                if (error.code === error.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+                                    errorDetails = 'Video format not supported or video file not found.';
+                                } else if (error.code === error.MEDIA_ERR_NETWORK) {
+                                    errorDetails = 'Network error while loading video.';
+                                } else if (error.code === error.MEDIA_ERR_DECODE) {
+                                    errorDetails = 'Video decoding error.';
+                                } else if (error.code === error.MEDIA_ERR_ABORTED) {
+                                    errorDetails = 'Video loading was aborted.';
+                                }
+                            }
+                            
+                            errorMsg.innerHTML = `
+                                <p style="color: #ff6b6b; margin-bottom: 20px; font-weight: bold; font-size: 18px;">⚠️ Video Unavailable</p>
+                                <p style="font-size: 14px; color: #ccc; margin-bottom: 20px;">${errorDetails}</p>
+                                <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 6px; margin: 15px 0; text-align: left; display: inline-block;">
+                                    <p style="font-size: 12px; color: #999; margin: 5px 0;"><strong>Common Causes:</strong></p>
+                                    <ul style="text-align: left; color: #ccc; font-size: 12px; margin: 10px 0; padding-left: 20px;">
+                                        <li>S3 path in metadata doesn't match actual S3 key</li>
+                                        <li>Video is private (requires AWS credentials)</li>
+                                        <li>Video file doesn't exist at specified path</li>
+                                        <li>AWS region misconfigured</li>
+                                    </ul>
+                                </div>
+                                <p style="margin-top: 20px; font-size: 11px; color: #666;">
+                                    <strong>To fix:</strong> Verify S3 key format or configure AWS credentials<br>
+                                    <code style="background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 3px; font-size: 10px; display: block; margin-top: 10px;">
+                                        export AWS_DEFAULT_REGION=us-east-2<br>
+                                        export AWS_ACCESS_KEY_ID=your-key<br>
+                                        export AWS_SECRET_ACCESS_KEY=your-secret
+                                    </code>
+                                </p>
+                            `;
+                            videoPlayer.parentNode.insertBefore(errorMsg, videoPlayer);
+                        }
+                    };
+                    
+                    // Wait 5 seconds before showing error, and check periodically
+                    errorTimeout = setTimeout(checkVideoState, 5000);
+                    
+                    // Also check after 2 seconds to see if video is loading
+                    setTimeout(function() {
+                        if (isVideoLoading || videoPlayer.readyState >= 2 || videoPlayer.networkState === 2) {
+                            // Video is loading, cancel error timeout
+                            if (errorTimeout) {
+                                clearTimeout(errorTimeout);
+                                errorTimeout = null;
+                            }
+                        }
+                    }, 2000);
+                };
+                
+                // Set source and try to play
+                videoPlayer.src = videoUrl;
+                
+                // Try to play
+                const playPromise = videoPlayer.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(e => {
+                        console.error('Play failed:', e);
+                        // Don't show error for these cases:
+                        // - NotAllowedError: User interaction required (autoplay blocked)
+                        // - AbortError: Operation was aborted (often happens during normal loading)
+                        // - If video is actually playing or has loaded data
+                        if (e.name === 'NotAllowedError') {
+                            // User interaction required - this is normal, don't show error
+                            return;
+                        }
+                        
+                        // Check if video is actually playable before showing error
+                        if (videoPlayer.readyState >= 2 || videoPlayer.readyState === 1) {
+                            // Video has loaded some data, might be playable - don't show error
+                            console.log('Video has loaded data, play error might be transient');
+                            return;
+                        }
+                        
+                        // For AbortError, wait a bit to see if video recovers
+                        if (e.name === 'AbortError' || e.message === 'The operation was aborted.') {
+                            // Wait a moment to see if video loads
+                            setTimeout(() => {
+                                // Only show error if video still can't play after delay
+                                if (videoPlayer.readyState < 2 && videoPlayer.paused) {
+                                    // Video still not ready, but don't show error for abort
+                                    console.log('Video aborted but might recover');
+                                }
+                            }, 2000);
+                            return;
+                        }
+                        
+                        // Only show error for other types of errors and only if video truly can't play
+                        setTimeout(() => {
+                            if (videoPlayer.readyState < 2 && videoPlayer.paused && !hasShownError) {
+                                const errorMsg = document.createElement('div');
+                                errorMsg.id = 'video-play-error-message';
+                                errorMsg.style.cssText = 'color: white; padding: 20px; text-align: center; background: rgba(255,0,0,0.2); border-radius: 8px; margin: 20px;';
+                                
+                                let errorDetails = 'Unknown error';
+                                if (e.name === 'NotSupportedError') {
+                                    errorDetails = 'Video format not supported or video failed to load. Check if video URL is accessible.';
+                                } else if (e.message && e.message.includes('CORS')) {
+                                    errorDetails = 'CORS error: Video server does not allow cross-origin requests.';
+                                } else {
+                                    errorDetails = e.message || 'Unable to play video';
+                                }
+                                
+                                errorMsg.innerHTML = `
+                                    <p style="color: #ff6b6b; margin-bottom: 15px; font-weight: bold;">Unable to play video</p>
+                                    <p style="font-size: 14px; color: #ccc; margin-bottom: 10px;">${errorDetails}</p>
+                                    <p style="margin-top: 15px; font-size: 12px; color: #999; word-break: break-all;">
+                                        Video URL: <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px;">${videoUrl}</code>
+                                    </p>
+                                `;
+                                videoPlayer.parentNode.insertBefore(errorMsg, videoPlayer);
+                                hasShownError = true;
+                            }
+                        }, 3000);
+                    });
+                }
+                
+                // Clear play error message if video successfully plays
+                videoPlayer.onplay = function() {
+                    const playError = document.getElementById('video-play-error-message');
+                    if (playError) {
+                        playError.remove();
+                    }
+                };
+            } else {
+                loadingMsg.innerHTML = `
+                    <p style="color: #ff6b6b;">Video URL not available</p>
+                    <p style="font-size: 14px; color: #ccc; margin-top: 10px;">
+                        This video does not have a valid URL configured.
+                    </p>
+                `;
+            }
+        }
+        
+        function closeVideoPlayer() {
+            videoPlayer.pause();
+            videoPlayer.src = '';
+            videoModal.classList.remove('active');
+            currentVideo = null;
+        }
+        
+        function togglePlayPause() {
+            if (videoPlayer.paused) {
+                videoPlayer.play();
+                document.getElementById('play-pause-btn').textContent = '⏸';
+            } else {
+                videoPlayer.pause();
+                document.getElementById('play-pause-btn').textContent = '▶';
+            }
+        }
+        
+        function seekVideo(event) {
+            const progressContainer = event.currentTarget;
+            const rect = progressContainer.getBoundingClientRect();
+            const pos = (event.clientX - rect.left) / rect.width;
+            videoPlayer.currentTime = pos * videoPlayer.duration;
+        }
+        
+        function toggleMute() {
+            videoPlayer.muted = !videoPlayer.muted;
+            document.getElementById('mute-btn').textContent = videoPlayer.muted ? '🔇' : '🔊';
+        }
+        
+        function setVolume(event) {
+            const volumeSlider = event.currentTarget;
+            const rect = volumeSlider.getBoundingClientRect();
+            const volume = (event.clientX - rect.left) / rect.width;
+            videoPlayer.volume = Math.max(0, Math.min(1, volume));
+            document.getElementById('video-volume-bar').style.width = (videoPlayer.volume * 100) + '%';
+        }
+        
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                videoPlayer.requestFullscreen().catch(err => {
+                    console.error('Fullscreen error:', err);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+        
+        // Update video player UI
+        videoPlayer.addEventListener('timeupdate', () => {
+            const progress = (videoPlayer.currentTime / videoPlayer.duration) * 100;
+            document.getElementById('video-progress-bar').style.width = progress + '%';
+            document.getElementById('video-current-time').textContent = formatTime(videoPlayer.currentTime);
+        });
+        
+        videoPlayer.addEventListener('loadedmetadata', () => {
+            document.getElementById('video-duration').textContent = formatTime(videoPlayer.duration);
+        });
+        
+        videoPlayer.addEventListener('play', () => {
+            document.getElementById('play-pause-btn').textContent = '⏸';
+        });
+        
+        videoPlayer.addEventListener('pause', () => {
+            document.getElementById('play-pause-btn').textContent = '▶';
+        });
+        
+        videoPlayer.addEventListener('volumechange', () => {
+            document.getElementById('video-volume-bar').style.width = (videoPlayer.volume * 100) + '%';
+            document.getElementById('mute-btn').textContent = videoPlayer.muted ? '🔇' : '🔊';
+        });
+        
+        // Close modal on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && videoModal.classList.contains('active')) {
+                closeVideoPlayer();
+            }
+        });
+        
+        // Close modal when clicking outside
+        videoModal.addEventListener('click', (e) => {
+            if (e.target === videoModal) {
+                closeVideoPlayer();
+            }
+        });
+        
+        function formatTime(seconds) {
+            if (isNaN(seconds)) return '0:00';
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+        
+        // Utility functions
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function stripHtml(html) {
+            const tmp = document.createElement('div');
+            tmp.innerHTML = html;
+            return tmp.textContent || tmp.innerText || '';
+        }
+        
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.textContent = message;
+            document.querySelector('.container').insertBefore(errorDiv, document.querySelector('header').nextSibling);
+            setTimeout(() => errorDiv.remove(), 5000);
+        }
+        
+        // Helper function to check if videos view is active
+        function isVideosViewActive() {
+            const videosView = document.getElementById('videos-view');
+            return videosView && !videosView.classList.contains('hidden') && 
+                   window.getComputedStyle(videosView).display !== 'none';
+        }
+        
+        // Helper function to check if search results view is active
+        function isSearchResultsViewActive() {
+            const searchResultsView = document.getElementById('search-results-view');
+            return searchResultsView && !searchResultsView.classList.contains('hidden') && 
+                   window.getComputedStyle(searchResultsView).display !== 'none';
+        }
+        
+        // Event listeners
+        document.getElementById('search-box').addEventListener('input', function(e) {
+            if (isVideosViewActive()) {
+                // We're in videos view, search videos within that space
+                clearTimeout(this.searchTimeout);
+                this.searchTimeout = setTimeout(searchVideos, 300);
+            } else if (isSearchResultsViewActive()) {
+                // We're in search results view, update search
+                clearTimeout(this.searchTimeout);
+                this.searchTimeout = setTimeout(() => {
+                    const searchTerm = this.value.trim();
+                    if (searchTerm) {
+                        currentSearch = searchTerm;
+                        currentPage = 1;
+                        loadSearchResults();
+                    } else {
+                        showSpaces();
+                    }
+                }, 300);
+            } else {
+                // We're in spaces view, search all videos
+                clearTimeout(this.searchTimeout);
+                this.searchTimeout = setTimeout(filterSpaces, 300);
+            }
+        });
+        
+        // Set up event delegation for space cards (works for dynamically added cards)
+        document.addEventListener('click', function(e) {
+            // Only handle clicks on space cards when spaces view is active
+            const card = e.target.closest('.space-card');
+            if (card && !isVideosViewActive()) {
+                // Check if card is not hidden
+                if (!card.classList.contains('hidden') && 
+                    window.getComputedStyle(card).display !== 'none') {
+                    const spaceName = card.getAttribute('data-space-name');
+                    if (spaceName) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('Space card clicked via delegation:', spaceName);
+                        showVideos(spaceName);
+                    }
+                }
+            }
+        });
+        
+        // Initialize on load
+        init();
+    </script>
+</body>
+</html>
+

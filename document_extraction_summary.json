@@ -1,0 +1,23 @@
+{
+  "total_documents": 189,
+  "extraction_status": "frameworks_created",
+  "next_steps": [
+    "Implement PDF text extraction (PyPDF2, pdfplumber)",
+    "Use OCR for scanned documents",
+    "Manual extraction for complex formatting",
+    "Review by medical professionals"
+  ],
+  "documents_by_type": {
+    "guideline": 169,
+    "unknown": 20
+  },
+  "documents_by_specialty": {
+    "unknown": 143,
+    "neonatal": 8,
+    "ecmo": 14,
+    "surgery": 10,
+    "pediatric": 12,
+    "critical_care": 2
+  },
+  "estimated_extraction_time": "94.5 hours (estimated 30 minutes per document)"
+}

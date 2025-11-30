@@ -1,0 +1,15 @@
+{
+  "total_content_items": 345,
+  "videos": 152,
+  "documents": 189,
+  "images": 4,
+  "transcription_status": "frameworks_created",
+  "created_at": "2025-10-03T18:56:28.867595",
+  "next_steps": [
+    "Implement actual transcription services",
+    "Set up PDF text extraction",
+    "Configure OCR for images",
+    "Establish review workflow",
+    "Create searchable text database"
+  ]
+}

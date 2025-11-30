@@ -1,0 +1,38 @@
+{
+  "document_id": "4220_4-guideline-1-Colorectal-Surgery-SSI-Protocol.pdf",
+  "title": "Colorectal Surgery Ssi Protocol",
+  "file_url": "spaces/4/content/4220/4-guideline-1-Colorectal-Surgery-SSI-Protocol.pdf",
+  "analysis": {
+    "keywords": [
+      "surgery",
+      "guideline",
+      "protocol",
+      "protocol"
+    ],
+    "medical_terms": [
+      "surgery",
+      "guideline",
+      "protocol",
+      "protocol"
+    ],
+    "content_type": "guideline",
+    "specialty": "surgery",
+    "urgency": "routine",
+    "description": "Surgical procedures - guideline document - covering surgery, guideline, protocol"
+  },
+  "extraction_status": "framework_created",
+  "extraction_method": "manual_or_pdf_library_required",
+  "extracted_text": "",
+  "key_sections": [],
+  "medical_terms_found": [
+    "surgery",
+    "guideline",
+    "protocol",
+    "protocol"
+  ],
+  "content_type": "guideline",
+  "specialty": "surgery",
+  "urgency": "routine",
+  "extraction_notes": "TEXT EXTRACTION NOTES FOR: Colorectal Surgery Ssi Protocol\n\nDOCUMENT TYPE: guideline\nMEDICAL SPECIALTY: surgery\nURGENCY LEVEL: routine\n\nEXPECTED CONTENT:\n- This appears to be a guideline document\n- Medical specialty: surgery\n- Urgency: routine\n\nKEY MEDICAL TERMS TO EXTRACT:\nsurgery, guideline, protocol, protocol\n\nEXTRACTION GUIDELINES:\n1. Extract all text content accurately\n2. Preserve formatting and structure\n3. Note section headers and subsections\n4. Extract tables and lists\n5. Include references and citations\n6. Note version numbers and dates\n\nRECOMMENDED EXTRACTION METHOD:\n- Use PyPDF2 or pdfplumber for PDF files\n- Use OCR for scanned documents\n- Manual extraction for complex formatting\n- Review by medical professional for accuracy",
+  "created_at": "2025-10-03T18:56:20.835177"
+}

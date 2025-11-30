@@ -1,0 +1,66 @@
+{
+  "analysis_date": "2025-01-27",
+  "total_videos_across_all_buckets": 10665,
+  "buckets_analyzed": {
+    "gcmd-production": {
+      "total_videos": 7182
+    },
+    "gcmd-testing": {
+      "total_videos": 3483
+    }
+  },
+  "gcmd-production": {
+    "s3_bucket": "gcmd-production",
+    "total_videos_found": 7182,
+  "video_locations": {
+    "videos/": {
+      "count": 3997,
+      "total_size_gb": 677.29,
+      "date_range": {
+        "oldest": "2022-03-30",
+        "newest": "2023-02-10"
+      },
+      "path_example": "s3://gcmd-production/videos/000a300e8f1e74ab4fec71506bea7096.mp4",
+      "description": "Main videos folder - contains the majority of your video content"
+    },
+    "vimeo_videos/": {
+      "count": 3185,
+      "total_size_gb": 1161.95,
+      "date_range": {
+        "oldest": "2023-07-19",
+        "newest": "2023-07-20"
+      },
+      "path_example": "s3://gcmd-production/vimeo_videos/fe3b29fdc0972317f5b5a4500cbc9e1d.mp4",
+      "description": "Vimeo-imported videos - larger file sizes, imported in July 2023"
+    },
+    "conferences/": {
+      "count": 0,
+      "description": "Conferences folder exists but contains no video files (has media/ subfolder but no videos found)"
+    }
+  },
+  "summary": {
+    "total_storage_gb": 1839.24,
+    "average_file_size_mb": 262.0,
+    "video_formats": [".mp4"],
+    "note": "All videos found are in .mp4 format. The total count (7,182) is higher than the expected ~2k, suggesting there may be additional videos beyond what was initially expected."
+  },
+  "gcmd-testing": {
+    "s3_bucket": "gcmd-testing",
+    "total_videos_found": 3483,
+    "video_locations": {
+      "videos/": {
+        "count": 3481,
+        "description": "Main videos folder in testing bucket"
+      }
+    },
+    "note": "Testing/development bucket - may contain duplicate or test videos"
+  },
+  "comparison_with_local_transcriptions": {
+    "local_transcription_files": 152,
+    "s3_videos_production": 7182,
+    "s3_videos_testing": 3483,
+    "total_s3_videos": 10665,
+    "gap": "There are significantly more videos in S3 (10,665 total) than transcription JSON files locally (152). This suggests most videos haven't been transcribed yet."
+  }
+}
+

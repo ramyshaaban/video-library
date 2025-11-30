@@ -1,0 +1,70 @@
+{
+  "title": "CCHMC Content Transcription Implementation Guide",
+  "created_at": "2025-10-03T18:56:28.867737",
+  "overview": "This guide provides step-by-step instructions for implementing actual content transcription",
+  "video_transcription": {
+    "description": "Transcribe 152 surgical and medical procedure videos",
+    "recommended_services": [
+      "AWS Transcribe Medical",
+      "Google Speech-to-Text with medical vocabulary",
+      "Microsoft Azure Speech Services",
+      "Professional medical transcription services"
+    ],
+    "implementation_steps": [
+      "Set up cloud transcription service",
+      "Configure medical vocabulary",
+      "Process videos in batches",
+      "Review and correct transcriptions",
+      "Add timestamp annotations",
+      "Create searchable database"
+    ],
+    "estimated_cost": "$500-2000 for 152 videos",
+    "estimated_time": "2-4 weeks"
+  },
+  "document_extraction": {
+    "description": "Extract text from 189 PDF documents and guidelines",
+    "recommended_tools": [
+      "PyPDF2 for PDF text extraction",
+      "pdfplumber for complex PDFs",
+      "Tesseract OCR for scanned documents",
+      "Adobe Acrobat Pro for complex formatting"
+    ],
+    "implementation_steps": [
+      "Install PDF extraction libraries",
+      "Process documents in batches",
+      "Handle different PDF formats",
+      "Extract tables and formatting",
+      "Create searchable text database"
+    ],
+    "estimated_cost": "$200-500 for tools and processing",
+    "estimated_time": "1-2 weeks"
+  },
+  "image_ocr": {
+    "description": "Extract text from 4 medical images",
+    "recommended_tools": [
+      "Tesseract OCR",
+      "Google Cloud Vision API",
+      "AWS Textract",
+      "Azure Computer Vision"
+    ],
+    "implementation_steps": [
+      "Set up OCR service",
+      "Process images",
+      "Review extracted text",
+      "Integrate with search system"
+    ],
+    "estimated_cost": "$50-100",
+    "estimated_time": "1-2 days"
+  },
+  "integration": {
+    "description": "Integrate all transcribed content into searchable system",
+    "recommended_approach": [
+      "Create unified search index",
+      "Implement medical terminology search",
+      "Add content categorization",
+      "Create user interface for searching",
+      "Implement content recommendations"
+    ],
+    "estimated_time": "2-3 weeks"
+  }
+}
