@@ -1,0 +1,1689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video with Timestops - {{ video.title }}</title>
+    {% if base_path %}<base href="{{ base_path }}/">{% endif %}
+    <!-- Preconnect to video CDN for faster loading -->
+    <link rel="preconnect" href="https://d1u4wu4o55kmvh.cloudfront.net">
+    <link rel="dns-prefetch" href="https://d1u4wu4o55kmvh.cloudfront.net">
+    <!-- HLS.js for adaptive bitrate streaming -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            padding: 20px;
+            margin: 0;
+            overflow-x: hidden;
+        }
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+        }
+        .header {
+            margin-bottom: 20px;
+        }
+        .back-link {
+            color: #667eea;
+            text-decoration: none;
+            display: inline-block;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            height: calc(100vh - 150px);
+            max-height: calc(100vh - 150px);
+            overflow: hidden;
+        }
+        .left-panel {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
+        }
+        .right-panel {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-height: 0;
+        }
+        .video-container {
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+            flex: 1;
+            min-height: 0;
+            max-height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .video-loading {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 10;
+            color: #fff;
+        }
+        .video-loading.hidden {
+            display: none !important;
+            visibility: hidden !important;
+        }
+        video {
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            display: block;
+            position: relative;
+            z-index: 1;
+        }
+        /* Video.js custom styling */
+        .video-js {
+            width: 100%;
+            height: 100%;
+            max-width: 100%;
+            max-height: 100%;
+        }
+        .video-js .vjs-big-play-button {
+            background-color: rgba(102, 126, 234, 0.8);
+            border-radius: 50%;
+            border: none;
+            width: 80px;
+            height: 80px;
+            line-height: 80px;
+            margin-top: -40px;
+            margin-left: -40px;
+        }
+        .video-js .vjs-big-play-button:hover {
+            background-color: rgba(102, 126, 234, 1);
+        }
+        .video-js .vjs-control-bar {
+            background: rgba(0, 0, 0, 0.8);
+        }
+        .video-js .vjs-play-progress {
+            background-color: #667eea;
+        }
+        .video-js .vjs-volume-level {
+            background-color: #667eea;
+        }
+        /* Hide download button */
+        .video-js .vjs-download-button {
+            display: none !important;
+        }
+        /* Hide right-click context menu */
+        .video-js video {
+            pointer-events: auto;
+        }
+        .search-container {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            flex-shrink: 0;
+        }
+        .search-box {
+            display: flex;
+            gap: 10px;
+        }
+        .search-input {
+            flex: 1;
+            padding: 12px 20px;
+            background: #1a1a1a;
+            border: 2px solid #444;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 16px;
+        }
+        .search-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .search-btn {
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        .search-btn:hover {
+            background: #5568d3;
+        }
+        .search-results {
+            margin-top: 10px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .search-result-item {
+            padding: 10px;
+            background: #1a1a1a;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            border-left: 3px solid transparent;
+            transition: all 0.2s;
+        }
+        .search-result-item:hover {
+            background: #2a2a2a;
+            border-left-color: #667eea;
+        }
+        .search-result-time {
+            color: #667eea;
+            font-weight: 600;
+            margin-right: 10px;
+        }
+        .search-result-text {
+            color: #ccc;
+        }
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #333;
+            flex-shrink: 0;
+        }
+        .tab {
+            padding: 12px 24px;
+            background: transparent;
+            border: none;
+            color: #999;
+            cursor: pointer;
+            font-size: 16px;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s;
+        }
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+        .tab-content {
+            display: none;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+        }
+        .tab-content.active {
+            display: flex;
+            flex-direction: column;
+        }
+        .timestops-container {
+            background: #2a2a2a;
+            border-radius: 10px;
+            padding: 15px;
+            overflow-y: auto;
+            flex: 1;
+            min-height: 0;
+        }
+        .timestop-item {
+            padding: 15px;
+            background: #1a1a1a;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-left: 4px solid transparent;
+        }
+        .timestop-item:hover {
+            background: #2a2a2a;
+            border-left-color: #667eea;
+            transform: translateX(5px);
+        }
+        .timestop-item.active {
+            border-left-color: #667eea;
+            background: #2a2a2a;
+        }
+        .timestop-time {
+            color: #667eea;
+            font-weight: 600;
+            font-size: 18px;
+            margin-bottom: 5px;
+        }
+        .timestop-label {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        .timestop-summary {
+            color: #999;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .transcription-container {
+            background: #2a2a2a;
+            border-radius: 10px;
+            padding: 20px;
+            overflow-y: auto;
+            line-height: 1.8;
+            font-size: 14px;
+            flex: 1;
+            min-height: 0;
+        }
+        .transcription-text {
+            color: #ccc;
+            white-space: pre-wrap;
+        }
+        .highlight {
+            background: #667eea;
+            color: #fff;
+            padding: 2px 4px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .highlight:hover {
+            background: #5568d3;
+        }
+        .no-results {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+        }
+        .quality-selector {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 5;
+            display: flex;
+            gap: 8px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 8px;
+            border-radius: 6px;
+        }
+        .quality-btn {
+            padding: 6px 12px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        .quality-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        .quality-btn.active {
+            background: #667eea;
+            border-color: #667eea;
+        }
+        /* Related Videos Section */
+        .related-videos-section {
+            background: #2a2a2a;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            flex-shrink: 0;
+        }
+        .related-videos-title {
+            font-size: 20px;
+            margin-bottom: 15px;
+            color: #fff;
+            font-weight: 600;
+        }
+        .related-videos-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 15px;
+        }
+        .related-video-card {
+            background: #1a1a1a;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+        .related-video-card:hover {
+            transform: translateY(-5px);
+            border-color: #667eea;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        .related-video-thumbnail {
+            position: relative;
+            width: 100%;
+            padding-top: 56.25%; /* 16:9 aspect ratio */
+            background: #000;
+            overflow: hidden;
+        }
+        .related-video-thumbnail img {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .related-video-placeholder {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #1a1a1a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #667eea;
+            font-size: 32px;
+        }
+        .related-video-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .related-video-card:hover .related-video-overlay {
+            opacity: 1;
+        }
+        .play-icon {
+            color: #fff;
+            font-size: 40px;
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+        }
+        .related-video-info {
+            padding: 12px;
+        }
+        .related-video-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 4px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            line-height: 1.4;
+            min-height: 2.8em;
+        }
+        .related-video-space {
+            font-size: 12px;
+            color: #999;
+            margin: 0;
+        }
+        @media (max-width: 1200px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+                height: auto;
+                max-height: none;
+            }
+            .video-container {
+                height: 50vh;
+                max-height: 50vh;
+            }
+            .timestops-container,
+            .transcription-container {
+                max-height: 400px;
+            }
+        }
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            h1 {
+                font-size: 20px;
+            }
+            .main-layout {
+                gap: 15px;
+                height: auto;
+                max-height: none;
+            }
+            .video-container {
+                height: 40vh;
+                max-height: 40vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="{{ base_path }}/" class="back-link">← Back to Library</a>
+            <h1>{{ video.title }}</h1>
+        </div>
+
+        <div class="main-layout">
+            <!-- Left Panel: Video -->
+            <div class="left-panel">
+                <div class="video-container">
+                    <div class="video-loading" id="video-loading">
+                        <div class="video-loading-spinner"></div>
+                        <div>Loading video...</div>
+                    </div>
+                    <div class="quality-selector" id="quality-selector" style="display: none;">
+                        <button class="quality-btn" data-quality="auto">Auto</button>
+                        <button class="quality-btn" data-quality="high">High</button>
+                        <button class="quality-btn" data-quality="medium">Medium</button>
+                        <button class="quality-btn" data-quality="low">Low</button>
+                    </div>
+                    <video id="video-player" controls crossorigin="anonymous" preload="metadata" playsinline webkit-playsinline>
+                        Your browser does not support the video tag.
+                    </video>
+                </div>
+            </div>
+
+            <!-- Right Panel: Search, Timestops, Transcription -->
+            <div class="right-panel">
+                <!-- Related Videos Section -->
+                {% if related_videos and related_videos|length > 0 %}
+                <div class="related-videos-section">
+                    <h2 class="related-videos-title">Related Videos</h2>
+                    <div class="related-videos-grid">
+                        {% for related_video in related_videos %}
+                        <div class="related-video-card" onclick="openVideoPage({{ related_video.content_id }})">
+                            <div class="related-video-thumbnail">
+                                {% if related_video.thumbnail %}
+                                <img src="{{ related_video.thumbnail }}" alt="{{ related_video.title }}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                {% endif %}
+                                <div class="related-video-placeholder" style="display: {% if related_video.thumbnail %}none{% else %}flex{% endif %};">
+                                    <span>▶</span>
+                                </div>
+                                <div class="related-video-overlay">
+                                    <span class="play-icon">▶</span>
+                                </div>
+                            </div>
+                            <div class="related-video-info">
+                                <h3 class="related-video-title">{{ related_video.title }}</h3>
+                                {% if related_video.space_name %}
+                                <p class="related-video-space">{{ related_video.space_name }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                <div class="search-container">
+                    <div class="search-box">
+                        <input type="text" id="search-input" class="search-input" placeholder="Search transcription and timestops...">
+                        <button class="search-btn" onclick="performSearch()">Search</button>
+                    </div>
+                    <div id="search-results" class="search-results"></div>
+                </div>
+
+                <div class="tabs">
+                    <button class="tab active" onclick="switchTab('timestops')">Timestops</button>
+                    <button class="tab" onclick="switchTab('transcription')">Full Transcription</button>
+                </div>
+
+                <div id="timestops-tab" class="tab-content active">
+                    <div class="timestops-container" id="timestops-container">
+                        {% if timestops %}
+                            {% for timestop in timestops %}
+                            <div class="timestop-item" data-timestamp="{{ timestop.timestamp }}" onclick="seekToTime({{ timestop.timestamp }})">
+                                <div class="timestop-time">{{ timestop.time_formatted }}</div>
+                                <div class="timestop-label">{{ timestop.label }}</div>
+                                <div class="timestop-summary">{{ timestop.summary }}</div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="no-results">No timestops available for this video.</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div id="transcription-tab" class="tab-content">
+                    <div class="transcription-container" id="transcription-container">
+                        {% if transcription %}
+                            <div class="transcription-text" id="transcription-text">{{ transcription.text }}</div>
+                        {% else %}
+                            <div class="no-results">No transcription available for this video.</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '{{ base_path|default("") }}';
+        const IS_HTTPS = {{ 'true' if is_https|default(false) else 'false' }};
+        const timestops = {{ timestops|tojson|safe }};
+        const transcription = {{ transcription.text|tojson|safe if transcription else '""'|safe }};
+        let currentHighlightedTimestop = null;
+        let video = null;  // Will be initialized when DOM is ready
+        let player = null;  // Video.js player instance
+        let hls = null;
+        let currentQuality = 'auto';
+        let connectionSpeed = null;
+        let videoLoadInProgress = false;  // Prevent multiple simultaneous loads
+        
+        // Detect connection speed
+        async function detectConnectionSpeed() {
+            if ('connection' in navigator) {
+                const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+                if (conn) {
+                    // Use effectiveType if available (4g, 3g, 2g, slow-2g)
+                    if (conn.effectiveType) {
+                        const speedMap = {
+                            'slow-2g': 0.5,
+                            '2g': 1,
+                            '3g': 2,
+                            '4g': 4
+                        };
+                        connectionSpeed = speedMap[conn.effectiveType] || 2;
+                        console.log('Connection speed detected:', conn.effectiveType, '(', connectionSpeed, 'x)');
+                        return connectionSpeed;
+                    }
+                    // Fallback to downlink speed
+                    if (conn.downlink) {
+                        connectionSpeed = conn.downlink;
+                        console.log('Connection speed detected:', conn.downlink, 'Mbps');
+                        return connectionSpeed;
+                    }
+                }
+            }
+            
+            // Fallback: Test download speed
+            try {
+                const startTime = performance.now();
+                const response = await fetch(`${API_BASE || window.location.origin}/api/video/stream/{{ video.content_id }}`, {
+                    method: 'HEAD',
+                    cache: 'no-cache'
+                });
+                const endTime = performance.now();
+                // Estimate speed based on response time (rough estimate)
+                connectionSpeed = endTime < 200 ? 4 : endTime < 500 ? 2 : 1;
+                console.log('Connection speed estimated:', connectionSpeed, 'x (based on response time)');
+            } catch (e) {
+                connectionSpeed = 2; // Default to medium
+            }
+            return connectionSpeed;
+        }
+        
+        // Ensure HTTPS URLs for video (required for iOS Safari)
+        function ensureHTTPS(url) {
+            if (!url) return url;
+            if (IS_HTTPS || window.location.protocol === 'https:') {
+                if (url.startsWith('http://')) {
+                    url = url.replace('http://', 'https://');
+                }
+            }
+            return url;
+        }
+        
+        // Get recommended quality based on connection speed
+        function getRecommendedQuality() {
+            if (!connectionSpeed) return 'auto';
+            if (connectionSpeed >= 3) return 'high';
+            if (connectionSpeed >= 1.5) return 'medium';
+            return 'low';
+        }
+        
+        // OLD FUNCTION - DISABLED - Redirecting to loadVideoSimple()
+        async function loadVideo() {
+            console.log('⚠️ OLD loadVideo() called - redirecting to loadVideoSimple()');
+            return loadVideoSimple();
+            
+            // DISABLED CODE BELOW - NOT REACHED
+            const videoId_DISABLED = {{ video.content_id }};
+            
+            // Get video element - ensure it exists
+            if (!video) {
+                video = document.getElementById('video-player');
+            }
+            
+            if (!video) {
+                console.error('Video element not found! Waiting for DOM...');
+                // Wait a bit and try again
+                setTimeout(() => {
+                    video = document.getElementById('video-player');
+                    if (video) {
+                        loadVideo();
+                    } else {
+                        console.error('Video element still not found after wait');
+                        const loadingEl = document.getElementById('video-loading');
+                        if (loadingEl) {
+                            loadingEl.innerHTML = '<div style="color: #ff6b6b; text-align: center; padding: 20px;">Video player not found. Please refresh the page.</div>';
+                        }
+                    }
+                }, 100);
+                return;
+            }
+            const loadingEl = document.getElementById('video-loading');
+            const qualitySelector = document.getElementById('quality-selector');
+            
+            // Check if elements exist
+            if (!video) {
+                console.error('Video element not found!');
+                if (loadingEl) {
+                    loadingEl.innerHTML = '<div style="color: #ff6b6b; text-align: center; padding: 20px;">Video player element not found. Please refresh the page.</div>';
+                }
+                return;
+            }
+            
+            if (!loadingEl) {
+                console.error('Loading element not found!');
+                return;
+            }
+            
+            console.log('=== LOAD VIDEO FUNCTION ===');
+            console.log('Video element:', video);
+            console.log('Video element ID:', video ? video.id : 'null');
+            console.log('Starting video load for video ID:', videoId);
+            console.log('API_BASE:', API_BASE);
+            console.log('Window location origin:', window.location.origin);
+            
+            videoLoadInProgress = true;
+            
+            try {
+                // Show loading indicator
+                console.log('Showing loading indicator...');
+                console.log('Loading element before show:', loadingEl);
+                console.log('Loading element current display:', loadingEl ? window.getComputedStyle(loadingEl).display : 'N/A');
+                loadingEl.style.display = 'flex';
+                loadingEl.style.visibility = 'visible';
+                loadingEl.classList.remove('hidden');
+                console.log('Loading element after show:', window.getComputedStyle(loadingEl).display);
+                
+                // Detect connection speed in parallel
+                detectConnectionSpeed();
+                
+                // Get video stream URL (prefer HLS for adaptive streaming)
+                console.log('Fetching video stream URL from API...');
+                const apiBase = API_BASE || window.location.origin;
+                const streamUrl = `${apiBase}/api/video/stream/${videoId}`;
+                console.log('API URL:', streamUrl);
+                console.log('Making fetch request...');
+                
+                const response = await fetch(streamUrl);
+                console.log('Fetch response status:', response.status, response.statusText);
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch video URL: ${response.status} ${response.statusText}`);
+                }
+                const data = await response.json();
+                console.log('Video stream response:', JSON.stringify(data, null, 2));
+                
+                let videoUrl = data.video_url;
+                if (!videoUrl) {
+                    throw new Error('No video_url in API response');
+                }
+                const isHLS = data.type === 'hls' || data.is_hls || videoUrl.includes('.m3u8');
+                console.log('Video URL:', videoUrl, 'Is HLS:', isHLS);
+                
+                // Handle relative URLs - CRITICAL FIX: API already returns correct path
+                // NEVER add base path - just add origin to make it absolute
+                if (videoUrl.startsWith('/') && !videoUrl.startsWith('//')) {
+                    // API already returns path with base path included (e.g., /videolibrary/api/...)
+                    // Just add origin, never add base path again
+                    videoUrl = window.location.origin + videoUrl;
+                    console.log('✅ OLD loadVideo: Converted URL to absolute:', videoUrl);
+                }
+                
+                // Ensure HTTPS
+                videoUrl = ensureHTTPS(videoUrl);
+                
+                // Check if HLS.js is available and video is HLS
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+                const supportsHLS = video.canPlayType('application/vnd.apple.mpegurl') || (typeof Hls !== 'undefined');
+                
+                if (isHLS && typeof Hls !== 'undefined' && Hls.isSupported() && !isIOS) {
+                    // Use HLS.js for adaptive bitrate streaming
+                    console.log('Using HLS.js for adaptive streaming');
+                    
+                    hls = new Hls({
+                        enableWorker: true,
+                        lowLatencyMode: false,
+                        backBufferLength: 90,
+                        maxBufferLength: 30,
+                        maxMaxBufferLength: 60,
+                        startLevel: -1, // Auto-select based on bandwidth
+                        capLevelToPlayerSize: true,
+                        abrEwmaDefaultEstimate: connectionSpeed ? connectionSpeed * 1000000 : 5000000, // bytes per second
+                        debug: false
+                    });
+                    
+                    hls.loadSource(videoUrl);
+                    hls.attachMedia(video);
+                    
+                    // Set recommended quality based on connection
+                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                        const levels = hls.levels;
+                        console.log('HLS manifest parsed, available quality levels:', levels.length);
+                        
+                        // Show quality selector if multiple levels available
+                        if (qualitySelector && levels.length > 1) {
+                            qualitySelector.style.display = 'block';
+                            updateQualityButtons(levels);
+                        }
+                        
+                        // Set initial quality based on connection speed
+                        if (currentQuality === 'auto') {
+                            const recommended = getRecommendedQuality();
+                            setQuality(recommended, levels);
+                        }
+                    });
+                    
+                    // Hide loading when video metadata is ready
+                    video.addEventListener('loadedmetadata', () => {
+                        console.log('✅ HLS video metadata loaded, duration:', video.duration);
+                        if (loadingEl) {
+                            console.log('Hiding loading via loadedmetadata, current display:', window.getComputedStyle(loadingEl).display);
+                            loadingEl.style.display = 'none';
+                            loadingEl.style.visibility = 'hidden';
+                            loadingEl.classList.add('hidden');
+                            console.log('Loading hidden, new display:', window.getComputedStyle(loadingEl).display);
+                        }
+                        videoLoadInProgress = false;
+                    }, { once: true });
+                    
+                    // Hide loading when video can play
+                    video.addEventListener('canplay', () => {
+                        console.log('✅ HLS video can play, readyState:', video.readyState);
+                        if (loadingEl) {
+                            console.log('Hiding loading via canplay, current display:', window.getComputedStyle(loadingEl).display);
+                            loadingEl.style.display = 'none';
+                            loadingEl.style.visibility = 'hidden';
+                            loadingEl.classList.add('hidden');
+                            console.log('Loading hidden, new display:', window.getComputedStyle(loadingEl).display);
+                        }
+                        videoLoadInProgress = false;
+                    }, { once: true });
+                    
+                    // Also hide on loadeddata
+                    video.addEventListener('loadeddata', () => {
+                        console.log('✅ HLS video data loaded, readyState:', video.readyState);
+                        if (loadingEl && window.getComputedStyle(loadingEl).display !== 'none') {
+                            console.log('Hiding loading via loadeddata');
+                            loadingEl.style.display = 'none';
+                            loadingEl.style.visibility = 'hidden';
+                            loadingEl.classList.add('hidden');
+                        }
+                        videoLoadInProgress = false;
+                    }, { once: true });
+                    
+                    // Error handling
+                    hls.on(Hls.Events.ERROR, (event, data) => {
+                        if (data.fatal) {
+                            switch(data.type) {
+                                case Hls.ErrorTypes.NETWORK_ERROR:
+                                    console.error('Fatal network error, trying to recover...');
+                                    hls.startLoad();
+                                    break;
+                                case Hls.ErrorTypes.MEDIA_ERROR:
+                                    console.error('Fatal media error, trying to recover...');
+                                    hls.recoverMediaError();
+                                    break;
+                                default:
+                                    console.error('Fatal error, destroying HLS instance');
+                                    hls.destroy();
+                                    // Fallback to regular video
+                                    loadVideoFallback(videoUrl);
+                                    break;
+                            }
+                        }
+                    });
+                    
+                } else if (isHLS && (isIOS || supportsHLS)) {
+                    // Native HLS support (iOS Safari)
+                    console.log('Using native HLS support');
+                    video.src = videoUrl;
+                    video.setAttribute('playsinline', 'true');
+                    video.setAttribute('webkit-playsinline', 'true');
+                    video.preload = 'metadata';
+                    video.load();
+                    
+                    video.addEventListener('loadedmetadata', () => {
+                        console.log('Native HLS metadata loaded');
+                        loadingEl.style.display = 'none';
+                    }, { once: true });
+                    
+                    video.addEventListener('canplay', () => {
+                        console.log('Native HLS can play');
+                        loadingEl.style.display = 'none';
+                    }, { once: true });
+                    
+                    video.addEventListener('error', (e) => {
+                        console.error('Native HLS video error:', e, video.error);
+                        if (video.error) {
+                            console.error('Error code:', video.error.code, 'Message:', video.error.message);
+                        }
+                        loadingEl.innerHTML = '<div style="color: #ff6b6b; text-align: center; padding: 20px;">Error loading HLS video. Trying fallback...</div>';
+                        // Try fallback after a delay
+                        setTimeout(() => {
+                            loadVideoFallback(videoUrl);
+                        }, 1000);
+                    });
+                    
+                } else {
+                    // Fallback to regular video (MP4)
+                    console.log('Using regular video playback (MP4)');
+                    console.log('Calling loadVideoFallback with URL:', videoUrl);
+                    await loadVideoFallback(videoUrl);
+                    console.log('loadVideoFallback completed');
+                }
+                
+                console.log('✅ Video loading initiated, URL:', videoUrl);
+                
+            } catch (error) {
+                console.error('Error loading video:', error);
+                videoLoadInProgress = false;
+                if (loadingEl) {
+                    loadingEl.innerHTML = '<div style="color: #ff6b6b; text-align: center; padding: 20px;">Error loading video: ' + error.message + '<br><button onclick="location.reload()" style="margin-top: 10px; padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">Retry</button></div>';
+                }
+            }
+        }
+        
+        // Fallback video loading (for non-HLS videos) - DISABLED, use loadVideoSimple instead
+        async function loadVideoFallback(videoUrl) {
+            console.log('⚠️ loadVideoFallback() called - redirecting to loadVideoSimple()');
+            return loadVideoSimple();
+            
+            // Clear any existing source and event listeners
+            video.src = '';
+            video.removeAttribute('src');
+            
+            // Set video attributes
+            video.preload = 'metadata';
+            video.setAttribute('playsinline', 'true');
+            video.setAttribute('webkit-playsinline', 'true');
+            video.setAttribute('crossorigin', 'anonymous');
+            
+            // Set source
+            video.src = videoUrl;
+            console.log('Video src set to:', video.src);
+            
+            // Hide loading when metadata is ready
+            const onMetadataLoaded = () => {
+                console.log('✅ Video metadata loaded, duration:', video.duration, 'readyState:', video.readyState);
+                if (loadingEl) {
+                    console.log('Hiding loading via loadedmetadata (fallback), current display:', window.getComputedStyle(loadingEl).display);
+                    loadingEl.style.display = 'none';
+                    loadingEl.style.visibility = 'hidden';
+                    loadingEl.classList.add('hidden');
+                    console.log('Loading hidden, new display:', window.getComputedStyle(loadingEl).display);
+                }
+                videoLoadInProgress = false;
+            };
+            
+            video.addEventListener('loadedmetadata', onMetadataLoaded, { once: true });
+            
+            video.addEventListener('canplay', () => {
+                loadingEl.style.display = 'none';
+                console.log('Video can play');
+            }, { once: true });
+            
+            video.addEventListener('canplaythrough', () => {
+                loadingEl.style.display = 'none';
+                console.log('Video can play through');
+            }, { once: true });
+            
+            // Error handling
+            video.addEventListener('error', (e) => {
+                console.error('Video error:', e, video.error);
+                loadingEl.innerHTML = '<div style="color: #ff6b6b; text-align: center; padding: 20px;">Error loading video. Please refresh the page.</div>';
+                if (video.error) {
+                    console.error('Error code:', video.error.code, 'Message:', video.error.message);
+                }
+            });
+            
+            // Timeout fallback - if video doesn't load in 10 seconds, show error
+            setTimeout(() => {
+                if (loadingEl.style.display !== 'none' && video.readyState === 0) {
+                    console.warn('Video loading timeout, checking status...');
+                    if (video.error) {
+                        loadingEl.innerHTML = '<div style="color: #ff6b6b; text-align: center; padding: 20px;">Video failed to load. Error code: ' + video.error.code + '</div>';
+                    } else {
+                        loadingEl.innerHTML = '<div style="color: #ffaa00; text-align: center; padding: 20px;">Video is taking longer than expected to load. Please check your connection.</div>';
+                    }
+                }
+            }, 10000);
+        }
+        
+        // Update quality selector buttons
+        function updateQualityButtons(levels) {
+            const selector = document.getElementById('quality-selector');
+            selector.innerHTML = '<button class="quality-btn active" data-quality="auto">Auto</button>';
+            
+            // Add quality levels
+            levels.forEach((level, index) => {
+                const height = level.height || 'Unknown';
+                const btn = document.createElement('button');
+                btn.className = 'quality-btn';
+                btn.dataset.quality = index;
+                btn.textContent = height + 'p';
+                btn.onclick = () => setQuality(index, levels);
+                selector.appendChild(btn);
+            });
+        }
+        
+        // Set video quality
+        function setQuality(quality, levels) {
+            if (!hls || !levels) return;
+            
+            currentQuality = quality;
+            
+            // Update button states
+            document.querySelectorAll('.quality-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.quality == quality) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            if (quality === 'auto') {
+                hls.currentLevel = -1; // Auto
+                console.log('Quality set to: Auto');
+            } else if (quality === 'high') {
+                // Find highest quality
+                const highest = levels.length - 1;
+                hls.currentLevel = highest;
+                console.log('Quality set to: High (', levels[highest].height, 'p)');
+            } else if (quality === 'medium') {
+                // Find middle quality
+                const middle = Math.floor(levels.length / 2);
+                hls.currentLevel = middle;
+                console.log('Quality set to: Medium (', levels[middle].height, 'p)');
+            } else if (quality === 'low') {
+                // Find lowest quality
+                hls.currentLevel = 0;
+                console.log('Quality set to: Low (', levels[0].height, 'p)');
+            } else if (typeof quality === 'number') {
+                // Specific level index
+                hls.currentLevel = quality;
+                console.log('Quality set to:', levels[quality].height, 'p');
+            }
+        }
+        
+        // Quality selector event handlers
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('quality-btn')) {
+                const quality = e.target.dataset.quality;
+                if (hls && hls.levels) {
+                    if (quality === 'auto') {
+                        setQuality('auto', hls.levels);
+                    } else if (quality === 'high') {
+                        setQuality('high', hls.levels);
+                    } else if (quality === 'medium') {
+                        setQuality('medium', hls.levels);
+                    } else if (quality === 'low') {
+                        setQuality('low', hls.levels);
+                    } else {
+                        setQuality(parseInt(quality), hls.levels);
+                    }
+                }
+            }
+        });
+        
+        // ULTRA SIMPLIFIED: Load video directly with maximum debugging
+        async function loadVideoSimple() {
+            const videoId = {{ video.content_id }};
+            console.log('🚀 STARTING VIDEO LOAD - Video ID:', videoId);
+            
+            const videoEl = document.getElementById('video-player');
+            const loadingEl = document.getElementById('video-loading');
+            
+            // Set global video variable for other functions
+            video = videoEl;
+            
+            console.log('Elements check:', {
+                video: !!videoEl,
+                videoId: videoEl ? videoEl.id : 'N/A',
+                loading: !!loadingEl,
+                loadingId: loadingEl ? loadingEl.id : 'N/A'
+            });
+            
+            if (!videoEl) {
+                console.error('❌ Video element not found!');
+                if (loadingEl) {
+                    loadingEl.innerHTML = '<div style="color: #ff6b6b; padding: 20px; text-align: center;">Video element not found!</div>';
+                }
+                return;
+            }
+            
+            if (!loadingEl) {
+                console.error('❌ Loading element not found!');
+                return;
+            }
+            
+            try {
+                // Safari-compatible API URL construction
+                // Use relative URL which Safari handles better than absolute URLs
+                const currentPath = window.location.pathname;
+                const pathParts = currentPath.split('/').filter(p => p);
+                
+                // Extract base path (e.g., "videolibrary" from "/videolibrary/video/11125")
+                const basePathFromUrl = pathParts.length > 0 ? '/' + pathParts[0] : '';
+                
+                // Build relative API URL (Safari prefers relative URLs)
+                const apiUrl = `${basePathFromUrl}/api/video/stream/${videoId}`;
+                console.log('API Request URL (relative):', apiUrl);
+                console.log('Current pathname:', currentPath);
+                console.log('Path parts:', pathParts);
+                console.log('Base path extracted:', basePathFromUrl);
+                console.log('Browser:', navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chrome') ? 'Safari' : 'Other');
+                
+                // Safari-compatible fetch with explicit credentials
+                const fetchOptions = {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    },
+                    credentials: 'same-origin' // Safari needs this for same-origin requests
+                };
+                
+                const response = await fetch(apiUrl, fetchOptions);
+                console.log('API Response status:', response.status, response.statusText);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('API Error Response:', errorText);
+                    console.error('Full response:', response);
+                    
+                    // Try absolute URL as fallback for Safari
+                    if (response.status === 404 && navigator.userAgent.includes('Safari') && !navigator.userAgent.includes('Chrome')) {
+                        console.log('Safari 404 detected, trying absolute URL...');
+                        const absoluteUrl = `${window.location.origin}${apiUrl}`;
+                        console.log('Trying absolute URL:', absoluteUrl);
+                        const fallbackResponse = await fetch(absoluteUrl, fetchOptions);
+                        if (fallbackResponse.ok) {
+                            const data = await fallbackResponse.json();
+                            console.log('Fallback API Response:', data);
+                            let videoUrl = data.video_url;
+                            if (!videoUrl) {
+                                throw new Error('No video_url in response');
+                            }
+                            // Continue with videoUrl processing...
+                            console.log('Video URL from API (raw):', videoUrl);
+                            
+                            // Use URL exactly as returned - just make it absolute if relative
+                            const currentUrl = new URL(window.location.href);
+                            if (videoUrl.startsWith('http://') || videoUrl.startsWith('https://')) {
+                                console.log('URL is absolute, using as-is');
+                            } else {
+                                videoUrl = currentUrl.origin + videoUrl;
+                                console.log('Made relative URL absolute:', videoUrl);
+                            }
+                            
+                            console.log('Final Video URL:', videoUrl);
+                            
+                            // Set video source
+                            videoEl.src = '';
+                            videoEl.src = videoUrl;
+                            videoEl.crossOrigin = 'anonymous';
+                            videoEl.preload = 'metadata';
+                            videoEl.load();
+                            
+                            // Event handlers
+                            const hideLoading = () => {
+                                if (loadingEl) {
+                                    loadingEl.style.display = 'none';
+                                    loadingEl.style.visibility = 'hidden';
+                                    loadingEl.classList.add('hidden');
+                                }
+                            };
+                            
+                            videoEl.addEventListener('loadedmetadata', hideLoading, { once: true });
+                            videoEl.addEventListener('canplay', hideLoading, { once: true });
+                            videoEl.addEventListener('error', (e) => {
+                                console.error('Video error:', videoEl.error);
+                                if (loadingEl) {
+                                    const errorCode = videoEl.error ? videoEl.error.code : 'unknown';
+                                    loadingEl.innerHTML = `<div style="color: #ff6b6b; padding: 20px; text-align: center;">Video error (code: ${errorCode})<br>URL: ${videoUrl.substring(0, 80)}...</div>`;
+                                }
+                            });
+                            
+                            return; // Exit early, we've handled it
+                        }
+                    }
+                    
+                    throw new Error(`API error: ${response.status} - ${errorText}`);
+                }
+                
+                const data = await response.json();
+                console.log('API Response:', data);
+                
+                let videoUrl = data.video_url;
+                if (!videoUrl) {
+                    throw new Error('No video_url in response');
+                }
+                
+                const isHLS = data.type === 'hls' || data.is_hls || videoUrl.includes('.m3u8');
+                const supportsAdaptive = data.supports_adaptive || false;
+                console.log('Video URL from API (raw):', videoUrl);
+                console.log('Is HLS:', isHLS, 'Supports Adaptive:', supportsAdaptive);
+                
+                // Use URL exactly as returned - just make it absolute if relative
+                const currentUrl = new URL(window.location.href);
+                if (videoUrl.startsWith('http://') || videoUrl.startsWith('https://')) {
+                    console.log('URL is absolute, using as-is');
+                } else {
+                    // Relative URL - prepend origin (API already has correct path)
+                    videoUrl = currentUrl.origin + videoUrl;
+                    console.log('Made relative URL absolute:', videoUrl);
+                }
+                
+                console.log('Final Video URL:', videoUrl);
+                
+                // Initialize Video.js player
+                if (player) {
+                    player.dispose();
+                }
+                
+                // Detect connection speed for adaptive quality
+                detectConnectionSpeed();
+                const recommendedQuality = getRecommendedQuality();
+                console.log('Connection speed:', connectionSpeed, 'Recommended quality:', recommendedQuality);
+                
+                // Check if Video.js is loaded
+                if (typeof videojs === 'undefined') {
+                    console.error('Video.js not loaded, falling back to native player');
+                    // Fallback to native player
+                    videoEl.src = '';
+                    videoEl.src = videoUrl;
+                    videoEl.crossOrigin = 'anonymous';
+                    videoEl.preload = 'metadata';
+                    videoEl.load();
+                    
+                    const hideLoading = () => {
+                        if (loadingEl) {
+                            loadingEl.style.display = 'none';
+                            loadingEl.style.visibility = 'hidden';
+                            loadingEl.classList.add('hidden');
+                        }
+                    };
+                    
+                    videoEl.addEventListener('loadedmetadata', hideLoading, { once: true });
+                    videoEl.addEventListener('canplay', hideLoading, { once: true });
+                    return;
+                }
+                
+                // Video.js player options
+                const playerOptions = {
+                    controls: true,
+                    preload: 'metadata',
+                    fluid: true,
+                    responsive: true,
+                    playbackRates: [0.5, 1, 1.25, 1.5, 2],
+                    html5: {
+                        vhs: {
+                            overrideNative: !isHLS, // Use native HLS on Safari if available
+                            enableLowInitialPlaylist: true,
+                            smoothQualityChange: true,
+                            bandwidth: connectionSpeed ? connectionSpeed * 1000000 : 5000000 // bytes per second
+                        }
+                    }
+                };
+                
+                // Initialize Video.js player
+                player = videojs('video-player', playerOptions, function() {
+                    console.log('Video.js player initialized');
+                    
+                    // Set video source
+                    this.src({
+                        src: videoUrl,
+                        type: isHLS ? 'application/x-mpegURL' : 'video/mp4'
+                    });
+                    
+                    // Hide loading indicator when ready
+                    this.ready(() => {
+                        console.log('Video.js player ready');
+                        if (loadingEl) {
+                            loadingEl.style.display = 'none';
+                            loadingEl.style.visibility = 'hidden';
+                            loadingEl.classList.add('hidden');
+                        }
+                    });
+                    
+                    // Add quality selector for HLS videos (if plugin is available)
+                    if (isHLS && typeof this.hlsQualitySelector === 'function') {
+                        try {
+                            this.hlsQualitySelector({
+                                displayCurrentQuality: true,
+                                placementIndex: 1
+                            });
+                            console.log('HLS quality selector added');
+                        } catch (e) {
+                            console.log('Quality selector plugin not available:', e);
+                        }
+                    }
+                    
+                    // Handle errors
+                    this.on('error', () => {
+                        const error = this.error();
+                        console.error('Video.js error:', error);
+                        if (loadingEl) {
+                            const errorCode = error ? error.code : 'unknown';
+                            loadingEl.innerHTML = `<div style="color: #ff6b6b; padding: 20px; text-align: center;">Video error (code: ${errorCode})<br>URL: ${videoUrl.substring(0, 80)}...</div>`;
+                        }
+                    });
+                    
+                    // Disable right-click context menu to prevent download
+                    const playerEl = this.el();
+                    if (playerEl) {
+                        playerEl.addEventListener('contextmenu', (e) => {
+                            e.preventDefault();
+                            return false;
+                        });
+                        
+                        // Disable keyboard shortcuts that might trigger download
+                        playerEl.addEventListener('keydown', (e) => {
+                            // Disable Ctrl+S, Ctrl+Shift+S, etc.
+                            if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+                                e.preventDefault();
+                                return false;
+                            }
+                        });
+                    }
+                });
+                
+                // Set global video reference for other functions
+                if (player && player.el) {
+                    video = player.el().querySelector('video');
+                }
+                
+                // OLD CODE BELOW - DISABLED
+                return;
+                
+                // Get quality selector element
+                const qualitySelector = document.getElementById('quality-selector');
+                
+                // Check if HLS.js is available and video is HLS
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+                const supportsHLS = videoEl.canPlayType('application/vnd.apple.mpegurl') || (typeof Hls !== 'undefined');
+                
+                if (isHLS && typeof Hls !== 'undefined' && Hls.isSupported() && !isIOS) {
+                    // Use HLS.js for adaptive bitrate streaming with quality selector
+                    console.log('Using HLS.js for adaptive streaming');
+                    
+                    hls = new Hls({
+                        enableWorker: true,
+                        lowLatencyMode: false,
+                        backBufferLength: 90,
+                        maxBufferLength: 30,
+                        maxMaxBufferLength: 60,
+                        startLevel: -1, // Auto-select based on bandwidth
+                        capLevelToPlayerSize: true,
+                        debug: false
+                    });
+                    
+                    hls.loadSource(videoUrl);
+                    hls.attachMedia(videoEl);
+                    
+                    // Show quality selector when manifest is parsed
+                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                        const levels = hls.levels;
+                        console.log('HLS manifest parsed, available quality levels:', levels.length);
+                        
+                        if (qualitySelector && levels.length > 1) {
+                            qualitySelector.style.display = 'block';
+                            updateQualityButtons(levels);
+                        }
+                    });
+                    
+                    // Event handlers for HLS
+                    const hideLoading = () => {
+                        if (loadingEl) {
+                            loadingEl.style.display = 'none';
+                            loadingEl.style.visibility = 'hidden';
+                            loadingEl.classList.add('hidden');
+                        }
+                    };
+                    
+                    videoEl.addEventListener('loadedmetadata', hideLoading, { once: true });
+                    videoEl.addEventListener('canplay', hideLoading, { once: true });
+                    videoEl.addEventListener('error', (e) => {
+                        console.error('Video error:', videoEl.error);
+                        if (loadingEl) {
+                            const errorCode = videoEl.error ? videoEl.error.code : 'unknown';
+                            loadingEl.innerHTML = `<div style="color: #ff6b6b; padding: 20px; text-align: center;">Video error (code: ${errorCode})<br>URL: ${videoUrl.substring(0, 80)}...</div>`;
+                        }
+                    });
+                    
+                } else if (isHLS && (isIOS || supportsHLS)) {
+                    // Native HLS support (iOS Safari) - no quality selector
+                    console.log('Using native HLS support');
+                    videoEl.src = videoUrl;
+                    videoEl.setAttribute('playsinline', 'true');
+                    videoEl.setAttribute('webkit-playsinline', 'true');
+                    videoEl.preload = 'metadata';
+                    videoEl.load();
+                    
+                    // Hide quality selector for native HLS
+                    if (qualitySelector) {
+                        qualitySelector.style.display = 'none';
+                    }
+                    
+                    const hideLoading = () => {
+                        if (loadingEl) {
+                            loadingEl.style.display = 'none';
+                            loadingEl.style.visibility = 'hidden';
+                            loadingEl.classList.add('hidden');
+                        }
+                    };
+                    
+                    videoEl.addEventListener('loadedmetadata', hideLoading, { once: true });
+                    videoEl.addEventListener('canplay', hideLoading, { once: true });
+                    videoEl.addEventListener('error', (e) => {
+                        console.error('Video error:', videoEl.error);
+                        if (loadingEl) {
+                            const errorCode = videoEl.error ? videoEl.error.code : 'unknown';
+                            loadingEl.innerHTML = `<div style="color: #ff6b6b; padding: 20px; text-align: center;">Video error (code: ${errorCode})<br>URL: ${videoUrl.substring(0, 80)}...</div>`;
+                        }
+                    });
+                    
+                } else {
+                    // Regular MP4 video - no quality selector (single quality only)
+                    console.log('Using regular MP4 video playback');
+                    videoEl.src = '';
+                    videoEl.src = videoUrl;
+                    videoEl.crossOrigin = 'anonymous';
+                    videoEl.preload = 'metadata';
+                    videoEl.load();
+                    
+                    // Hide quality selector for MP4
+                    if (qualitySelector) {
+                        qualitySelector.style.display = 'none';
+                    }
+                    
+                    // Event handlers
+                    const hideLoading = () => {
+                        if (loadingEl) {
+                            loadingEl.style.display = 'none';
+                            loadingEl.style.visibility = 'hidden';
+                            loadingEl.classList.add('hidden');
+                        }
+                    };
+                    
+                    videoEl.addEventListener('loadedmetadata', hideLoading, { once: true });
+                    videoEl.addEventListener('canplay', hideLoading, { once: true });
+                    videoEl.addEventListener('error', (e) => {
+                        console.error('Video error:', videoEl.error);
+                        if (loadingEl) {
+                            const errorCode = videoEl.error ? videoEl.error.code : 'unknown';
+                            loadingEl.innerHTML = `<div style="color: #ff6b6b; padding: 20px; text-align: center;">Video error (code: ${errorCode})<br>URL: ${videoUrl.substring(0, 80)}...</div>`;
+                        }
+                    });
+                }
+                
+            } catch (error) {
+                console.error('Error:', error);
+                if (loadingEl) {
+                    loadingEl.innerHTML = `<div style="color: #ff6b6b; padding: 20px; text-align: center;">Error: ${error.message}</div>`;
+                }
+            }
+        }
+        
+        // Initialize when DOM is ready - FORCE use of loadVideoSimple only
+        console.log('📄 Script loaded (v2.0 - NEW APPROACH), document readyState:', document.readyState);
+        // Clear any cached references
+        if (typeof loadVideo === 'function') {
+            const originalLoadVideo = loadVideo;
+            loadVideo = function() {
+                console.log('⚠️ loadVideo() intercepted - redirecting to loadVideoSimple()');
+                return loadVideoSimple();
+            };
+        }
+        if (document.readyState === 'loading') {
+            console.log('⏳ Waiting for DOMContentLoaded...');
+            document.addEventListener('DOMContentLoaded', () => {
+                console.log('✅ DOMContentLoaded fired - calling loadVideoSimple()');
+                loadVideoSimple();
+            });
+        } else {
+            console.log('✅ DOM already ready, calling loadVideoSimple() in 100ms...');
+            setTimeout(() => {
+                console.log('🚀 Starting loadVideoSimple()...');
+                loadVideoSimple();
+            }, 100);
+        }
+        
+        // Handle video errors (will be set up in loadVideo() and loadVideoFallback() functions)
+
+        // Navigate to video page
+        function openVideoPage(videoId) {
+            const currentPath = window.location.pathname;
+            const pathParts = currentPath.split('/').filter(p => p);
+            const basePathFromUrl = pathParts.length > 0 ? '/' + pathParts[0] : '';
+            const videoUrl = `${window.location.origin}${basePathFromUrl}/video/${videoId}`;
+            window.location.href = videoUrl;
+        }
+        
+        // Seek to specific time
+        function seekToTime(timestamp) {
+            if (video) {
+                video.currentTime = timestamp;
+                video.play();
+            }
+            
+            // Highlight active timestop
+            document.querySelectorAll('.timestop-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            if (event && event.currentTarget) {
+                event.currentTarget.classList.add('active');
+            }
+            currentHighlightedTimestop = timestamp;
+            
+            // Scroll to timestop
+            if (event && event.currentTarget) {
+                event.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+
+        // Switch tabs
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tabName + '-tab').classList.add('active');
+        }
+
+        // Search functionality
+        function performSearch() {
+            const query = document.getElementById('search-input').value.toLowerCase().trim();
+            const resultsContainer = document.getElementById('search-results');
+            
+            if (!query) {
+                resultsContainer.innerHTML = '';
+                return;
+            }
+
+            const results = [];
+            
+            // Search in timestops
+            timestops.forEach(ts => {
+                if (ts.label.toLowerCase().includes(query) || 
+                    (ts.summary && ts.summary.toLowerCase().includes(query))) {
+                    results.push({
+                        type: 'timestop',
+                        timestamp: ts.timestamp,
+                        time: ts.time_formatted,
+                        text: ts.label + (ts.summary ? ': ' + ts.summary : ''),
+                        timestop: ts
+                    });
+                }
+            });
+
+            // Search in transcription
+            if (transcription) {
+                const transcriptionLower = transcription.toLowerCase();
+                const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+                let match;
+                let lastIndex = 0;
+                
+                while ((match = regex.exec(transcriptionLower)) !== null) {
+                    const start = Math.max(0, match.index - 50);
+                    const end = Math.min(transcription.length, match.index + match[0].length + 50);
+                    const snippet = transcription.substring(start, end);
+                    
+                    // Estimate timestamp (rough calculation)
+                    const estimatedTime = video && video.duration ? (match.index / transcription.length) * video.duration : 0;
+                    
+                    results.push({
+                        type: 'transcription',
+                        timestamp: estimatedTime,
+                        time: formatTime(estimatedTime),
+                        text: '...' + snippet + '...',
+                        matchIndex: match.index
+                    });
+                }
+            }
+
+            // Display results
+            if (results.length === 0) {
+                resultsContainer.innerHTML = '<div class="no-results">No results found</div>';
+                return;
+            }
+
+            resultsContainer.innerHTML = results.map(result => `
+                <div class="search-result-item" onclick="jumpToResult(${result.timestamp}, '${result.type}')">
+                    <span class="search-result-time">${result.time}</span>
+                    <span class="search-result-text">${highlightText(result.text, query)}</span>
+                </div>
+            `).join('');
+        }
+
+        // Jump to search result
+        function jumpToResult(timestamp, type) {
+            seekToTime(timestamp);
+            
+            if (type === 'timestop') {
+                switchTab('timestops');
+            } else {
+                switchTab('transcription');
+                // Scroll to highlighted text in transcription
+                setTimeout(() => {
+                    const highlights = document.querySelectorAll('.highlight');
+                    if (highlights.length > 0) {
+                        highlights[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }, 100);
+            }
+        }
+
+        // Highlight text in results
+        function highlightText(text, query) {
+            const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+            return text.replace(regex, '<mark style="background: #667eea; color: white; padding: 2px 4px; border-radius: 3px;">$1</mark>');
+        }
+
+        // Format time
+        function formatTime(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+            if (h > 0) {
+                return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            }
+            return `${m}:${s.toString().padStart(2, '0')}`;
+        }
+
+        // Search on Enter key
+        const searchInput = document.getElementById('search-input');
+        if (searchInput) {
+            searchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    performSearch();
+                }
+            });
+        }
+
+        // Highlight current timestop as video plays
+        function setupTimeupdateListener() {
+            if (!video && !player) {
+                // Wait for video/player to be initialized
+                setTimeout(setupTimeupdateListener, 500);
+                return;
+            }
+            
+            const timeupdateHandler = () => {
+            const currentTime = video ? video.currentTime : 0;
+            
+            // Find closest timestop
+            let closestTimestop = null;
+            let closestDiff = Infinity;
+            
+            timestops.forEach(ts => {
+                const diff = Math.abs(ts.timestamp - currentTime);
+                if (diff < closestDiff && diff < 5) { // Within 5 seconds
+                    closestDiff = diff;
+                    closestTimestop = ts;
+                }
+            });
+
+            if (closestTimestop && closestTimestop.timestamp !== currentHighlightedTimestop) {
+                document.querySelectorAll('.timestop-item').forEach(item => {
+                    item.classList.remove('active');
+                    if (parseFloat(item.dataset.timestamp) === closestTimestop.timestamp) {
+                        item.classList.add('active');
+                    }
+                });
+                currentHighlightedTimestop = closestTimestop.timestamp;
+            }
+            };
+            
+            // Attach listener
+            if (player && typeof player.on === 'function') {
+                player.on('timeupdate', timeupdateHandler);
+            } else if (video && video.addEventListener) {
+                video.addEventListener('timeupdate', timeupdateHandler);
+            }
+        }
+        
+        // Setup listener after a delay to ensure player is initialized
+        setTimeout(setupTimeupdateListener, 1000);
+
+        // Highlight transcription when searching
+        function highlightTranscription(query) {
+            if (!transcription || !query) return;
+            
+            const container = document.getElementById('transcription-text');
+            const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+            const highlighted = transcription.replace(regex, '<span class="highlight" onclick="jumpToTranscriptionMatch(this)">$1</span>');
+            container.innerHTML = highlighted;
+        }
+
+        // Jump to transcription match (estimate time)
+        function jumpToTranscriptionMatch(element) {
+            const textBefore = element.previousSibling ? element.previousSibling.textContent : '';
+            const charIndex = textBefore.length;
+            const estimatedTime = video && video.duration ? (charIndex / transcription.length) * video.duration : 0;
+            seekToTime(estimatedTime);
+        }
+    </script>
+</body>
+</html>
+
