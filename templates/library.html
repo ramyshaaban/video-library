@@ -699,7 +699,9 @@
         // Create playlist card
         function createPlaylistCard(playlist) {
             const card = document.createElement('div');
-            card.className = 'space-card';
+            card.className = 'space-card playlist-card';
+            card.setAttribute('data-playlist-id', playlist.playlist_id);
+            card.style.cursor = 'pointer';
             
             // Thumbnail
             if (playlist.thumbnail) {
@@ -734,17 +736,23 @@
             }
             
             // Click handler - show playlist videos
-            card.onclick = () => showPlaylistVideos(playlist);
+            card.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Playlist card clicked:', playlist.title);
+                showPlaylistVideos(playlist);
+            });
             
             return card;
         }
         
         // Show videos in a playlist
         async function showPlaylistVideos(playlist) {
+            console.log('showPlaylistVideos called for:', playlist.title, playlist.playlist_id);
             currentSpace = null;
             currentPlaylist = playlist;
             
-            // Update view
+            // Update view - hide spaces section, show videos view
             document.getElementById('spaces-view').classList.add('hidden');
             document.getElementById('videos-view').classList.remove('hidden');
             document.getElementById('search-results-view').classList.add('hidden');
@@ -761,12 +769,15 @@
                 loadingEl.style.display = 'block';
                 gridEl.innerHTML = '';
                 
-                const response = await fetch(`${API_BASE}/api/playlists/${playlist.playlist_id}/videos`);
+                const apiUrl = `${API_BASE}/api/playlists/${playlist.playlist_id}/videos`;
+                console.log('Fetching playlist videos from:', apiUrl);
+                const response = await fetch(apiUrl);
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
                 
                 const data = await response.json();
+                console.log('Playlist videos response:', data);
                 loadingEl.style.display = 'none';
                 
                 if (!data.videos || data.videos.length === 0) {
@@ -803,12 +814,15 @@
                 });
                 
                 // Hide pagination for playlists
-                document.getElementById('pagination').innerHTML = '';
+                const paginationEl = document.getElementById('pagination');
+                if (paginationEl) {
+                    paginationEl.innerHTML = '';
+                }
                 
             } catch (error) {
                 console.error('Error loading playlist videos:', error);
-                loadingEl.textContent = 'Error loading playlist videos: ' + error.message;
-                loadingEl.style.color = '#c33';
+                loadingEl.style.display = 'none';
+                gridEl.innerHTML = `<div style="text-align: center; padding: 40px; color: #c33;">Error loading playlist videos: ${error.message}</div>`;
             }
         }
         
@@ -1917,6 +1931,10 @@
             // Only handle clicks on space cards when spaces view is active
             const card = e.target.closest('.space-card');
             if (card && !isVideosViewActive()) {
+                // Skip playlist cards - they have their own handler
+                if (card.classList.contains('playlist-card')) {
+                    return;
+                }
                 // Check if card is not hidden
                 if (!card.classList.contains('hidden') && 
                     window.getComputedStyle(card).display !== 'none') {
