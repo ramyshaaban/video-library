@@ -8,11 +8,13 @@ from flask import Flask, render_template, jsonify, request, send_file, Response
 import json
 from collections import defaultdict
 from datetime import datetime
+from typing import Dict, List, Optional
 import os
 import re
 from difflib import SequenceMatcher
 import requests
 from urllib.parse import urlparse
+import urllib.parse
 
 # Try to import boto3 for presigned URLs (optional)
 try:
@@ -26,8 +28,22 @@ except ImportError:
 # Get the directory where this script is located
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
+STATIC_DIR = os.path.join(BASE_DIR, 'static')
 
-app = Flask(__name__, template_folder=TEMPLATE_DIR)
+app = Flask(__name__, template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR, static_url_path='/static')
+
+# Support for subpath deployment (e.g., /videolibrary)
+# Get base path from X-Forwarded-Prefix header (set by nginx)
+@app.before_request
+def set_base_path():
+    base_path = request.headers.get('X-Forwarded-Prefix', '')
+    if base_path:
+        # Store in g for use in templates
+        from flask import g
+        g.base_path = base_path.rstrip('/')
+    else:
+        from flask import g
+        g.base_path = ''
 
 # Elasticsearch configuration
 ELASTICSEARCH_ENABLED = os.getenv('ELASTICSEARCH_ENABLED', 'true').lower() == 'true'
@@ -80,6 +96,69 @@ def categorize_by_space(videos):
 def fuzzy_match_ratio(str1, str2):
     """Calculate similarity ratio between two strings (0-1)"""
     return SequenceMatcher(None, str1.lower(), str2.lower()).ratio()
+
+def create_url_slug(text):
+    """Create URL-friendly slug from text"""
+    if not text:
+        return ''
+    # Convert to lowercase
+    slug = text.lower()
+    # Replace spaces and special characters with hyphens
+    slug = re.sub(r'[^\w\s-]', '', slug)  # Remove special chars except hyphens
+    slug = re.sub(r'[-\s]+', '-', slug)  # Replace spaces and multiple hyphens with single hyphen
+    slug = slug.strip('-')  # Remove leading/trailing hyphens
+    return slug
+
+def find_video_by_slug(space_name_slug, video_name_slug):
+    """Find video by space name and video name slugs"""
+    space_name_slug = urllib.parse.unquote(space_name_slug).lower().strip()
+    video_name_slug = urllib.parse.unquote(video_name_slug).lower().strip()
+    
+    print(f"🔍 find_video_by_slug: space='{space_name_slug}', video='{video_name_slug}'")
+    
+    # Try exact match first
+    for video in all_videos:
+        video_space_slug = create_url_slug(video.get('space_name', '')).lower().strip()
+        video_title_slug = create_url_slug(video.get('title', '')).lower().strip()
+        
+        if video_space_slug == space_name_slug and video_title_slug == video_name_slug:
+            print(f"✅ Exact match found: id={video.get('content_id')}")
+            return video
+    
+    # Try partial match (space name must match, video title can be partial)
+    for video in all_videos:
+        video_space_slug = create_url_slug(video.get('space_name', '')).lower().strip()
+        video_title_slug = create_url_slug(video.get('title', '')).lower().strip()
+        
+        # Space name must match exactly or be very similar
+        if video_space_slug == space_name_slug or space_name_slug in video_space_slug or video_space_slug in space_name_slug:
+            # Video title should contain the slug or vice versa
+            if video_name_slug in video_title_slug or video_title_slug in video_name_slug:
+                print(f"✅ Partial match found: id={video.get('content_id')}, space='{video_space_slug}', title='{video_title_slug[:50]}...'")
+                return video
+    
+    # Try fuzzy match if exact match fails
+    best_match = None
+    best_score = 0.0
+    
+    for video in all_videos:
+        video_space_slug = create_url_slug(video.get('space_name', '')).lower().strip()
+        video_title_slug = create_url_slug(video.get('title', '')).lower().strip()
+        
+        space_score = fuzzy_match_ratio(video_space_slug, space_name_slug)
+        title_score = fuzzy_match_ratio(video_title_slug, video_name_slug)
+        
+        # Combined score (both must match reasonably well)
+        combined_score = (space_score * 0.4) + (title_score * 0.6)
+        
+        if combined_score > best_score and combined_score > 0.5:  # Lower threshold to 50%
+            best_score = combined_score
+            best_match = video
+    
+    if best_match:
+        print(f"✅ Fuzzy match found (score={best_score:.2f}): id={best_match.get('content_id')}")
+    
+    return best_match
 
 def extract_text_from_html(html):
     """Extract plain text from HTML"""
@@ -361,10 +440,487 @@ except Exception as e:
     all_videos = []
     spaces_dict = {}
 
+# Add friendly URL route BEFORE the index route to ensure it's matched first
+# This route must come before other routes that might catch it
+@app.route('/videolibrary/<space_name>/<video_name>')
+@app.route('/<space_name>/<video_name>')  # Also support without /videolibrary prefix
+def video_with_timestops_friendly(space_name, video_name):
+    """Video page with friendly URL: /videolibrary/<space_name>/<video_name>"""
+    base_path = request.headers.get('X-Forwarded-Prefix', '')
+    
+    # Debug: Log the request
+    print(f"🎬 Friendly URL route hit: path='{request.path}', space='{space_name}', video='{video_name}'")
+    
+    # Find video by space name and video name slugs
+    video = find_video_by_slug(space_name, video_name)
+    
+    if not video:
+        # Debug: Try to find what videos exist with similar names
+        print(f"❌ Video not found. Searching for similar matches...")
+        matches_found = []
+        for v in all_videos:
+            space_slug = create_url_slug(v.get('space_name', '')).lower()
+            title_slug = create_url_slug(v.get('title', '')).lower()
+            if 'cchmc' in space_slug or 'quad' in title_slug or 'adec' in title_slug:
+                matches_found.append({
+                    'id': v.get('content_id'),
+                    'space': space_slug,
+                    'title': title_slug[:80]
+                })
+                if len(matches_found) >= 5:
+                    break
+        
+        if matches_found:
+            print(f"  Found {len(matches_found)} similar videos:")
+            for m in matches_found:
+                print(f"    ID {m['id']}: space='{m['space']}', title='{m['title']}'")
+        
+        return jsonify({
+            'error': 'Video not found',
+            'searched_space': space_name,
+            'searched_video': video_name,
+            'similar_matches': matches_found[:3] if matches_found else []
+        }), 404
+    
+    # Use the same logic as video_with_timestops but with the found video
+    video_id = video.get('content_id')
+    
+    # Get video URL - use proxy endpoint for reliable streaming
+    video_url = video.get('hls_url')
+    if not video_url:
+        # Use proxy endpoint which handles CloudFront signed URLs
+        if base_path:
+            video_url = f"{base_path}/api/video/proxy/{video_id}"
+        else:
+            video_url = f"/api/video/proxy/{video_id}"
+    elif video_url.startswith('/'):
+        video_url = f"{base_path}{video_url}" if base_path else video_url
+    elif not video_url.startswith('http'):
+        if base_path:
+            video_url = f"{base_path}/api/video/proxy/{video_id}"
+        else:
+            video_url = f"/api/video/proxy/{video_id}"
+    
+    # Get timestops from database
+    timestops = []
+    try:
+        import psycopg2
+        with open('production_rds_credentials.json', 'r') as f:
+            creds = json.load(f)
+        
+        conn = psycopg2.connect(
+            host=creds['host'],
+            port=creds['port'],
+            user=creds['username'],
+            password=creds['password'],
+            database=creds.get('dbInstanceIdentifier', 'staycurrentmd'),
+            sslmode='prefer'
+        )
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT timestamp, time_formatted, label, summary, type
+            FROM video_timestops
+            WHERE content_id = %s
+            ORDER BY timestamp
+        """, (video_id,))
+        
+        for row in cur.fetchall():
+            timestops.append({
+                'timestamp': row[0],
+                'time_formatted': row[1],
+                'label': row[2],
+                'summary': row[3],
+                'type': row[4]
+            })
+        
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Error fetching timestops: {e}")
+        # Try file fallback
+        timestops_file = os.path.join(BASE_DIR, 'video_timestops', f'{video_id}_timestops.json')
+        if os.path.exists(timestops_file):
+            with open(timestops_file, 'r') as f:
+                data = json.load(f)
+                timestops = data.get('timestops', [])
+    
+    # Get transcription
+    transcription = None
+    try:
+        import psycopg2
+        with open('production_rds_credentials.json', 'r') as f:
+            creds = json.load(f)
+        
+        conn = psycopg2.connect(
+            host=creds['host'],
+            port=creds['port'],
+            user=creds['username'],
+            password=creds['password'],
+            database=creds.get('dbInstanceIdentifier', 'staycurrentmd'),
+            sslmode='prefer'
+        )
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT transcription_text, transcription_json, duration, language, word_count
+            FROM video_transcriptions
+            WHERE content_id = %s
+            LIMIT 1
+        """, (video_id,))
+        
+        row = cur.fetchone()
+        if row:
+            transcription = {
+                'text': row[0],
+                'json': row[1] if row[1] else None,
+                'duration': row[2],
+                'language': row[3],
+                'word_count': row[4]
+            }
+        
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Error fetching transcription: {e}")
+        # Try file fallback
+        transcription_file = os.path.join(BASE_DIR, 'video_transcriptions', f'{video_id}_transcription.json')
+        if os.path.exists(transcription_file):
+            with open(transcription_file, 'r') as f:
+                data = json.load(f)
+                transcription_data = data.get('transcription', {})
+                transcription = {
+                    'text': transcription_data.get('text', ''),
+                    'json': transcription_data if transcription_data else None,
+                    'duration': transcription_data.get('duration'),
+                    'language': transcription_data.get('language'),
+                    'word_count': transcription_data.get('word_count')
+                }
+    
+    # Get related videos (from same space, excluding current video)
+    related_videos = []
+    current_space = video.get('space_name', '')
+    for v in all_videos:
+        if (v.get('content_id') != video_id and 
+            v.get('space_name', '') == current_space and 
+            v.get('content_id') is not None):
+            related_videos.append(v)
+            if len(related_videos) >= 6:  # Limit to 6 related videos
+                break
+    
+    # If not enough videos from same space, add videos from other spaces
+    if len(related_videos) < 6:
+        for v in all_videos:
+            if (v.get('content_id') != video_id and 
+                v.get('content_id') is not None and
+                v not in related_videos):
+                related_videos.append(v)
+                if len(related_videos) >= 6:
+                    break
+    
+    # Determine if request is HTTPS (check X-Forwarded-Proto header from Nginx)
+    is_https = request.headers.get('X-Forwarded-Proto', 'http') == 'https' or request.is_secure
+
+    return render_template('video_with_timestops.html',
+                          video=video,
+                          timestops=timestops,
+                          transcription=transcription,
+                          related_videos=related_videos,
+                          base_path=base_path,
+                          is_https=is_https)
+
 @app.route('/')
 def index():
     """Main library page"""
-    return render_template('library.html')
+    base_path = request.headers.get('X-Forwarded-Prefix', '')
+    return render_template('library.html', base_path=base_path.rstrip('/') if base_path else '')
+
+@app.route('/hub/cchmc')
+@app.route('/videolibrary/hub/cchmc')
+def cchmc_hub():
+    """CCHMC Hub page listing all divisions"""
+    base_path = request.headers.get('X-Forwarded-Prefix', '')
+    # If accessed via /videolibrary path locally, set base_path
+    if request.path.startswith('/videolibrary') and not base_path:
+        base_path = '/videolibrary'
+    
+    # Define CCHMC divisions and their space names (matching actual space names in database)
+    divisions = [
+        {
+            'name': 'CCHMC Pediatric Surgery',
+            'space_name': 'CCHMC Pediatric Surgery',
+            'slug': 'cchmc-pediatric-surgery',
+            'has_microsite': True,
+            'icon': '⚕️'
+        },
+        {
+            'name': 'StayCurrentMD',
+            'space_name': 'StayCurrentMD',
+            'slug': None,
+            'has_microsite': False,
+            'icon': '🎓'
+        },
+        {
+            'name': 'StayCurrentMD Español',
+            'space_name': 'StayCurrent Espanol',
+            'slug': None,
+            'has_microsite': False,
+            'icon': '🌎'
+        },
+        {
+            'name': 'CCHMC PAG',
+            'space_name': 'CCHMC PAG',
+            'slug': None,
+            'has_microsite': False,
+            'icon': '👥'
+        },
+        {
+            'name': 'CCHMC Neurosurgery',
+            'space_name': 'CCHMC Neurosurgery',
+            'slug': None,
+            'has_microsite': False,
+            'icon': '🧠'
+        },
+        {
+            'name': 'CCHMC Division of Orthopaedic Surgery',
+            'space_name': 'CCHMC Division of Orthopaedic Surgery',
+            'slug': None,
+            'has_microsite': False,
+            'icon': '🦴'
+        },
+        {
+            'name': 'SIM Center',
+            'space_name': 'SIM Center',
+            'slug': None,
+            'has_microsite': False,
+            'icon': '🎯'
+        },
+        {
+            'name': 'StayCurrent Forums',
+            'space_name': 'StayCurrent Forums',
+            'slug': None,
+            'has_microsite': False,
+            'icon': '💬'
+        },
+        {
+            'name': 'CCHMC Heart Institute',
+            'space_name': 'CCHMC Heart Institute',
+            'slug': None,
+            'has_microsite': False,
+            'icon': '❤️'
+        }
+    ]
+    
+    # Count videos for each division
+    for division in divisions:
+        space_name = division['space_name']
+        division['video_count'] = len(spaces_dict.get(space_name, []))
+    
+    return render_template(
+        'cchmc_hub.html',
+        base_path=base_path.rstrip('/') if base_path else '',
+        divisions=divisions
+    )
+
+@app.route('/microsite/<slug>')
+def microsite(slug):
+    """Microsite page for individual doctors/surgeons"""
+    base_path = request.headers.get('X-Forwarded-Prefix', '')
+    
+    # Load microsite configuration
+    config_file = os.path.join(BASE_DIR, 'microsites_config.json')
+    if not os.path.exists(config_file):
+        return jsonify({'error': 'Microsite configuration not found'}), 404
+    
+    with open(config_file, 'r') as f:
+        config = json.load(f)
+    
+    if slug not in config.get('microsites', {}):
+        return jsonify({'error': 'Microsite not found'}), 404
+    
+    microsite_config = config['microsites'][slug]
+    
+    # Filter videos for this microsite
+    search_terms = microsite_config.get('search_terms', [])
+    space_filter = microsite_config.get('space_filter', '')
+    microsite_videos = []
+    
+    for video in all_videos:
+        # Check space filter first (if specified)
+        if space_filter:
+            if video.get('space_name', '') == space_filter:
+                microsite_videos.append(video)
+                continue
+        
+        # Check search terms (in title, description, or space name)
+        if search_terms:
+            title = video.get('title', '').lower()
+            description = video.get('description', '').lower() if video.get('description') else ''
+            space_name = video.get('space_name', '').lower()
+            text = f"{title} {description} {space_name}"
+            
+            if any(term.lower() in text for term in search_terms):
+                microsite_videos.append(video)
+    
+    # Categorize videos
+    categories = categorize_microsite_videos(microsite_videos, microsite_config.get('categories', {}))
+    
+    # Calculate total likes and shares
+    total_likes = sum(video.get('likes', 0) for video in microsite_videos)
+    total_shares = sum(video.get('shares', 0) for video in microsite_videos)
+    
+    # If likes/shares not in data, calculate from views or use defaults
+    if total_likes == 0 and total_shares == 0:
+        # Estimate based on video count (rough engagement metrics)
+        # You can replace this with actual data when available
+        total_likes = len(microsite_videos) * 12  # Average 12 likes per video
+        total_shares = len(microsite_videos) * 3   # Average 3 shares per video
+    
+    return render_template(
+        'microsite.html',
+        base_path=base_path.rstrip('/') if base_path else '',
+        microsite=microsite_config,
+        categories=categories,
+        total_videos=len(microsite_videos),
+        total_likes=total_likes,
+        total_shares=total_shares
+    )
+
+def categorize_microsite_videos(videos, category_config):
+    """Categorize videos based on microsite configuration"""
+    categories = defaultdict(list)
+    
+    for video in videos:
+        title = video.get('title', '').lower()
+        description = video.get('description', '').lower() if video.get('description') else ''
+        space = video.get('space_name', '')
+        text = f"{title} {description}"
+        
+        categorized = False
+        
+        for cat_name, cat_config in category_config.items():
+            keywords = cat_config.get('keywords', [])
+            space_filter = cat_config.get('space_filter', '')
+            
+            # Check space filter first
+            if space_filter and space == space_filter:
+                categories[cat_name].append(video)
+                categorized = True
+                break
+            
+            # Check keywords
+            if any(keyword.lower() in text for keyword in keywords):
+                categories[cat_name].append(video)
+                categorized = True
+                break
+        
+        # Don't create "All Videos" category - it's handled separately in template
+        # Videos that don't match any category will just not appear in category filters
+    
+    # Format for template
+    result = {}
+    for cat_name, cat_videos in categories.items():
+        cat_config = category_config.get(cat_name, {})
+        result[cat_name] = {
+            'videos': cat_videos[:24],  # Limit for initial display
+            'total': len(cat_videos),
+            'icon': cat_config.get('icon', '📹')
+        }
+    
+    return result
+
+@app.route('/api/microsite/<slug>/videos')
+def get_microsite_videos(slug):
+    """API endpoint to get videos for a microsite"""
+    # Load microsite configuration
+    config_file = os.path.join(BASE_DIR, 'microsites_config.json')
+    if not os.path.exists(config_file):
+        return jsonify({'error': 'Microsite configuration not found'}), 404
+    
+    with open(config_file, 'r') as f:
+        config = json.load(f)
+    
+    if slug not in config.get('microsites', {}):
+        return jsonify({'error': 'Microsite not found'}), 404
+    
+    microsite_config = config['microsites'][slug]
+    search_terms = microsite_config.get('search_terms', [])
+    space_filter = microsite_config.get('space_filter', '')
+    
+    # Filter videos
+    microsite_videos = []
+    for video in all_videos:
+        # Check space filter first (if specified)
+        if space_filter:
+            if video.get('space_name', '') == space_filter:
+                microsite_videos.append(video)
+                continue
+        
+        # Check search terms (in title, description, or space name)
+        if search_terms:
+            title = video.get('title', '').lower()
+            description = video.get('description', '').lower() if video.get('description') else ''
+            space_name = video.get('space_name', '').lower()
+            text = f"{title} {description} {space_name}"
+            
+            if any(term.lower() in text for term in search_terms):
+                microsite_videos.append(video)
+    
+    # Get category filter
+    category = request.args.get('category', '')
+    if category:
+        categories = categorize_microsite_videos(microsite_videos, microsite_config.get('categories', {}))
+        if category in categories:
+            microsite_videos = categories[category]['videos']
+    
+    # Pagination
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 24, type=int)
+    search = request.args.get('search', '', type=str)
+    
+    # Filter by search
+    if search:
+        search_lower = search.lower()
+        microsite_videos = [
+            v for v in microsite_videos
+            if search_lower in v.get('title', '').lower() or
+               search_lower in (v.get('description') or '').lower()
+        ]
+    
+    # Sort by date
+    microsite_videos = sorted(
+        microsite_videos,
+        key=lambda x: x.get('created_at', ''),
+        reverse=True
+    )
+    
+    # Paginate
+    total = len(microsite_videos)
+    total_pages = (total + per_page - 1) // per_page  # Ceiling division
+    start = (page - 1) * per_page
+    end = start + per_page
+    paginated_videos = microsite_videos[start:end]
+    
+    # Format for response
+    video_list = []
+    for video in paginated_videos:
+        video_list.append({
+            'id': video.get('content_id'),
+            'title': video.get('title', 'Untitled'),
+            'description': video.get('description', ''),
+            'file_path': video.get('file_path', ''),
+            'thumbnail': video.get('thumbnail', ''),
+            'hls_url': video.get('hls_url', ''),
+            'created_at': video.get('created_at', '')[:10] if video.get('created_at') else 'Unknown date'
+        })
+    
+    return jsonify({
+        'videos': video_list,
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'total_pages': total_pages,
+        'has_next': page < total_pages,
+        'has_prev': page > 1
+    })
 
 @app.route('/api/spaces')
 def get_spaces():
@@ -386,7 +942,6 @@ def get_spaces():
 def get_space_videos(space_name):
     """API endpoint to get videos for a specific space"""
     # Decode space name from URL
-    import urllib.parse
     space_name = urllib.parse.unquote(space_name)
     
     if space_name not in spaces_dict:
@@ -431,7 +986,8 @@ def get_space_videos(space_name):
             'thumbnail': video.get('thumbnail', ''),
             'hls_url': video.get('hls_url', ''),
             'created_at': video.get('created_at', '')[:10] if video.get('created_at') else 'Unknown date',
-            'updated_at': video.get('updated_at', '')[:10] if video.get('updated_at') else 'Unknown date'
+            'updated_at': video.get('updated_at', '')[:10] if video.get('updated_at') else 'Unknown date',
+            'space_name': video.get('space_name', 'Unknown Space')
         })
     
     return jsonify({
@@ -445,9 +1001,128 @@ def get_space_videos(space_name):
         'space_name': space_name
     })
 
+def get_timestops_for_videos(video_ids: List[int]) -> Dict[int, List[Dict]]:
+    """Get timestops for multiple videos from database"""
+    if not video_ids:
+        return {}
+    
+    try:
+        import psycopg2
+        with open('production_rds_credentials.json', 'r') as f:
+            creds = json.load(f)
+        
+        conn = psycopg2.connect(
+            host=creds['host'],
+            port=creds['port'],
+            user=creds['username'],
+            password=creds['password'],
+            database=creds.get('dbInstanceIdentifier', 'staycurrentmd'),
+            sslmode='prefer'
+        )
+        cur = conn.cursor()
+        
+        # Search timestops that match the search term
+        placeholders = ','.join(['%s'] * len(video_ids))
+        cur.execute(f"""
+            SELECT content_id, timestamp, time_formatted, label, summary, type
+            FROM video_timestops
+            WHERE content_id IN ({placeholders})
+            ORDER BY content_id, timestamp
+        """, tuple(video_ids))
+        
+        timestops_dict = {}
+        for row in cur.fetchall():
+            video_id = row[0]
+            if video_id not in timestops_dict:
+                timestops_dict[video_id] = []
+            timestops_dict[video_id].append({
+                'timestamp': row[1],
+                'time_formatted': row[2],
+                'label': row[3],
+                'summary': row[4],
+                'type': row[5]
+            })
+        
+        cur.close()
+        conn.close()
+        return timestops_dict
+    except Exception as e:
+        print(f"⚠️  Error fetching timestops: {e}")
+        return {}
+
+def search_timestops_in_database(search_term: str) -> List[int]:
+    """Search timestops in database and return matching video IDs"""
+    try:
+        import psycopg2
+        with open('production_rds_credentials.json', 'r') as f:
+            creds = json.load(f)
+        
+        conn = psycopg2.connect(
+            host=creds['host'],
+            port=creds['port'],
+            user=creds['username'],
+            password=creds['password'],
+            database=creds.get('dbInstanceIdentifier', 'staycurrentmd'),
+            sslmode='prefer'
+        )
+        cur = conn.cursor()
+        
+        # Full-text search in timestops
+        cur.execute("""
+            SELECT DISTINCT content_id
+            FROM video_timestops
+            WHERE 
+                to_tsvector('english', label || ' ' || COALESCE(summary, '')) @@ plainto_tsquery('english', %s)
+            ORDER BY content_id
+        """, (search_term,))
+        
+        video_ids = [row[0] for row in cur.fetchall()]
+        
+        cur.close()
+        conn.close()
+        return video_ids
+    except Exception as e:
+        print(f"⚠️  Error searching timestops: {e}")
+        return []
+
+def search_transcriptions_in_database(search_term: str) -> List[int]:
+    """Search transcriptions in database and return matching video IDs"""
+    try:
+        import psycopg2
+        with open('production_rds_credentials.json', 'r') as f:
+            creds = json.load(f)
+        
+        conn = psycopg2.connect(
+            host=creds['host'],
+            port=creds['port'],
+            user=creds['username'],
+            password=creds['password'],
+            database=creds.get('dbInstanceIdentifier', 'staycurrentmd'),
+            sslmode='prefer'
+        )
+        cur = conn.cursor()
+        
+        # Full-text search in transcriptions
+        cur.execute("""
+            SELECT DISTINCT content_id
+            FROM video_transcriptions
+            WHERE 
+                to_tsvector('english', transcription_text) @@ plainto_tsquery('english', %s)
+            ORDER BY content_id
+        """, (search_term,))
+        
+        video_ids = [row[0] for row in cur.fetchall()]
+        
+        cur.close()
+        conn.close()
+        return video_ids
+    except Exception as e:
+        print(f"⚠️  Error searching transcriptions: {e}")
+        return []
+
 @app.route('/api/search')
 def search_all_videos():
-    """API endpoint to search videos across all spaces with Elasticsearch fuzzy matching"""
+    """API endpoint to search videos across all spaces with timestop support"""
     search = request.args.get('search', '', type=str)
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 24, type=int)
@@ -462,6 +1137,20 @@ def search_all_videos():
                 'total_pages': 0
             }
         })
+    
+    # Search timestops and transcriptions in database
+    timestop_video_ids = search_timestops_in_database(search)
+    transcription_video_ids = search_transcriptions_in_database(search)
+    
+    # Combine all video IDs from timestops and transcriptions
+    all_matching_video_ids = set(timestop_video_ids + transcription_video_ids)
+    
+    timestop_videos = {}
+    if all_matching_video_ids:
+        # Get video details for timestop/transcription matches
+        for video in all_videos:
+            if video.get('content_id') in all_matching_video_ids:
+                timestop_videos[video.get('content_id')] = video
     
     # Use Elasticsearch if available, otherwise fall back to basic search
     if es_client:
@@ -528,10 +1217,13 @@ def search_all_videos():
             
             # Format videos for response
             video_list = []
+            video_ids_from_search = []
             for hit in hits:
                 source = hit['_source']
+                video_id = source.get('content_id')
+                video_ids_from_search.append(video_id)
                 video_list.append({
-                    'id': source.get('content_id'),
+                    'id': video_id,
                     'title': source.get('title', 'Untitled'),
                     'description': source.get('description', ''),
                     'file_path': source.get('file_path', ''),
@@ -540,11 +1232,56 @@ def search_all_videos():
                     'created_at': source.get('created_at', '')[:10] if source.get('created_at') else 'Unknown date',
                     'updated_at': source.get('updated_at', '')[:10] if source.get('updated_at') else 'Unknown date',
                     'space_name': source.get('space_name', 'Unknown Space'),
-                    'score': hit.get('_score', 0)  # Include relevance score for debugging
+                    'score': hit.get('_score', 0),
+                    'match_type': 'metadata'
                 })
             
+            # Add timestop matches (if not already in results)
+            for video_id in timestop_video_ids:
+                if video_id not in video_ids_from_search and video_id in timestop_videos:
+                    video = timestop_videos[video_id]
+                    video_list.append({
+                        'id': video_id,
+                        'title': video.get('title', 'Untitled'),
+                        'description': video.get('description', ''),
+                        'file_path': video.get('file_path', ''),
+                        'thumbnail': video.get('thumbnail', ''),
+                        'hls_url': video.get('hls_url', ''),
+                        'created_at': video.get('created_at', '')[:10] if video.get('created_at') else 'Unknown date',
+                        'updated_at': video.get('updated_at', '')[:10] if video.get('updated_at') else 'Unknown date',
+                        'space_name': video.get('space_name', 'Unknown Space'),
+                        'score': 0.5,  # Lower score for timestop-only matches
+                        'match_type': 'timestop'
+                    })
+            
+            # Get timestops for all videos in results
+            all_video_ids = [v['id'] for v in video_list]
+            timestops_dict = get_timestops_for_videos(all_video_ids)
+            
+            # Filter and attach relevant timestops (matching search term)
+            search_lower = search.lower()
+            for video in video_list:
+                video_id = video['id']
+                if video_id in timestops_dict:
+                    # Filter timestops that match search term
+                    relevant_timestops = [
+                        ts for ts in timestops_dict[video_id]
+                        if search_lower in ts['label'].lower() or 
+                           (ts.get('summary') and search_lower in ts['summary'].lower())
+                    ]
+                    video['relevant_timestops'] = relevant_timestops[:5]  # Limit to 5 most relevant
+            
+            # Re-sort by score (timestop matches + metadata matches)
+            video_list.sort(key=lambda x: x['score'], reverse=True)
+            
+            # Paginate
+            total = len(video_list)
+            start = (page - 1) * per_page
+            end = start + per_page
+            paginated_videos = video_list[start:end]
+            
             return jsonify({
-                'videos': video_list,
+                'videos': paginated_videos,
                 'pagination': {
                     'page': page,
                     'per_page': per_page,
@@ -552,7 +1289,8 @@ def search_all_videos():
                     'total_pages': (total + per_page - 1) // per_page
                 },
                 'search_term': search,
-                'search_engine': 'elasticsearch'
+                'search_engine': 'elasticsearch',
+                'timestop_matches': len(timestop_video_ids)
             })
         except Exception as e:
             print(f"⚠️  Elasticsearch search error: {e}, falling back to basic search")
@@ -580,10 +1318,13 @@ def search_all_videos():
     
     # Format videos for response
     video_list = []
+    video_ids_from_search = []
     for item in paginated_results:
         video = item['video']
+        video_id = video.get('content_id')
+        video_ids_from_search.append(video_id)
         video_list.append({
-            'id': video.get('content_id'),
+            'id': video_id,
             'title': video.get('title', 'Untitled'),
             'description': video.get('description', ''),
             'file_path': video.get('file_path', ''),
@@ -592,11 +1333,55 @@ def search_all_videos():
             'created_at': video.get('created_at', '')[:10] if video.get('created_at') else 'Unknown date',
             'updated_at': video.get('updated_at', '')[:10] if video.get('updated_at') else 'Unknown date',
             'space_name': item['space_name'],
-            'score': round(item['score'], 3)  # Include relevance score
+            'score': round(item['score'], 3),
+            'match_type': 'metadata'
         })
     
+    # Add timestop matches (if not already in results)
+    for video_id in timestop_video_ids:
+        if video_id not in video_ids_from_search and video_id in timestop_videos:
+            video = timestop_videos[video_id]
+            video_list.append({
+                'id': video_id,
+                'title': video.get('title', 'Untitled'),
+                'description': video.get('description', ''),
+                'file_path': video.get('file_path', ''),
+                'thumbnail': video.get('thumbnail', ''),
+                'hls_url': video.get('hls_url', ''),
+                'created_at': video.get('created_at', '')[:10] if video.get('created_at') else 'Unknown date',
+                'updated_at': video.get('updated_at', '')[:10] if video.get('updated_at') else 'Unknown date',
+                'space_name': video.get('space_name', 'Unknown Space'),
+                'score': 0.5,
+                'match_type': 'timestop'
+            })
+    
+    # Get timestops for all videos
+    all_video_ids = [v['id'] for v in video_list]
+    timestops_dict = get_timestops_for_videos(all_video_ids)
+    
+    # Filter and attach relevant timestops
+    search_lower = search.lower()
+    for video in video_list:
+        video_id = video['id']
+        if video_id in timestops_dict:
+            relevant_timestops = [
+                ts for ts in timestops_dict[video_id]
+                if search_lower in ts['label'].lower() or 
+                   (ts.get('summary') and search_lower in ts['summary'].lower())
+            ]
+            video['relevant_timestops'] = relevant_timestops[:5]
+    
+    # Re-sort by score
+    video_list.sort(key=lambda x: x['score'], reverse=True)
+    
+    # Re-paginate after adding timestop matches
+    total = len(video_list)
+    start = (page - 1) * per_page
+    end = start + per_page
+    paginated_videos = video_list[start:end]
+    
     return jsonify({
-        'videos': video_list,
+        'videos': paginated_videos,
         'pagination': {
             'page': page,
             'per_page': per_page,
@@ -604,7 +1389,8 @@ def search_all_videos():
             'total_pages': (total + per_page - 1) // per_page
         },
         'search_term': search,
-        'search_engine': 'fuzzy'  # Changed from 'basic' to 'fuzzy'
+        'search_engine': 'fuzzy',
+        'timestop_matches': len(timestop_video_ids)
     })
 
 @app.route('/api/video/<int:video_id>')
@@ -614,6 +1400,209 @@ def get_video(video_id):
         if video.get('content_id') == video_id:
             return jsonify(video)
     return jsonify({'error': 'Video not found'}), 404
+
+@app.route('/api/video/<int:video_id>/timestops')
+def get_video_timestops(video_id):
+    """API endpoint to get AI-generated timestops for a video"""
+    timestops_file = os.path.join(BASE_DIR, 'video_timestops', f'{video_id}_timestops.json')
+    
+    if os.path.exists(timestops_file):
+        try:
+            with open(timestops_file, 'r') as f:
+                data = json.load(f)
+                return jsonify({
+                    'content_id': video_id,
+                    'timestops': data.get('timestops', []),
+                    'status': data.get('status', 'success'),
+                    'processed_at': data.get('processed_at')
+                })
+        except Exception as e:
+            return jsonify({'error': f'Error reading timestops: {str(e)}'}), 500
+    else:
+        return jsonify({
+            'content_id': video_id,
+            'timestops': [],
+            'status': 'not_processed',
+            'message': 'Timestops not yet generated for this video'
+        })
+
+@app.route('/api/video/<int:video_id>/transcription')
+def get_video_transcription(video_id):
+    """API endpoint to get transcription for a video"""
+    transcription_file = os.path.join(BASE_DIR, 'video_transcriptions', f'{video_id}_transcription.json')
+    
+    if os.path.exists(transcription_file):
+        try:
+            with open(transcription_file, 'r') as f:
+                data = json.load(f)
+                return jsonify({
+                    'content_id': video_id,
+                    'transcription': data.get('transcription', {}),
+                    'processed_at': data.get('processed_at')
+                })
+        except Exception as e:
+            return jsonify({'error': f'Error reading transcription: {str(e)}'}), 500
+    else:
+        return jsonify({
+            'content_id': video_id,
+            'transcription': None,
+            'status': 'not_processed',
+            'message': 'Transcription not yet generated for this video'
+        })
+
+@app.route('/video/<int:video_id>')
+@app.route('/videolibrary/video/<int:video_id>')
+def video_with_timestops(video_id):
+    """Video page with timestops, transcription, and search"""
+    base_path = request.headers.get('X-Forwarded-Prefix', '')
+    
+    # Find video
+    video = None
+    for v in all_videos:
+        if v.get('content_id') == video_id:
+            video = v
+            break
+    
+    if not video:
+        return jsonify({'error': 'Video not found'}), 404
+    
+    # Get video URL - use proxy endpoint for reliable streaming
+    video_url = video.get('hls_url')
+    if not video_url:
+        # Use proxy endpoint which handles CloudFront signed URLs
+        if base_path:
+            video_url = f"{base_path}/api/video/proxy/{video_id}"
+        else:
+            video_url = f"/api/video/proxy/{video_id}"
+    elif video_url.startswith('/'):
+        video_url = f"{base_path}{video_url}" if base_path else video_url
+    elif not video_url.startswith('http'):
+        if base_path:
+            video_url = f"{base_path}/api/video/proxy/{video_id}"
+        else:
+            video_url = f"/api/video/proxy/{video_id}"
+    
+    # Get timestops from database
+    timestops = []
+    try:
+        import psycopg2
+        with open('production_rds_credentials.json', 'r') as f:
+            creds = json.load(f)
+        
+        conn = psycopg2.connect(
+            host=creds['host'],
+            port=creds['port'],
+            user=creds['username'],
+            password=creds['password'],
+            database=creds.get('dbInstanceIdentifier', 'staycurrentmd'),
+            sslmode='prefer'
+        )
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT timestamp, time_formatted, label, summary, type
+            FROM video_timestops
+            WHERE content_id = %s
+            ORDER BY timestamp
+        """, (video_id,))
+        
+        for row in cur.fetchall():
+            timestops.append({
+                'timestamp': row[0],
+                'time_formatted': row[1],
+                'label': row[2],
+                'summary': row[3],
+                'type': row[4]
+            })
+        
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Error fetching timestops: {e}")
+        # Try file fallback
+        timestops_file = os.path.join(BASE_DIR, 'video_timestops', f'{video_id}_timestops.json')
+        if os.path.exists(timestops_file):
+            with open(timestops_file, 'r') as f:
+                data = json.load(f)
+                timestops = data.get('timestops', [])
+    
+    # Get transcription
+    transcription = None
+    try:
+        import psycopg2
+        with open('production_rds_credentials.json', 'r') as f:
+            creds = json.load(f)
+        
+        conn = psycopg2.connect(
+            host=creds['host'],
+            port=creds['port'],
+            user=creds['username'],
+            password=creds['password'],
+            database=creds.get('dbInstanceIdentifier', 'staycurrentmd'),
+            sslmode='prefer'
+        )
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT transcription_text, transcription_json
+            FROM video_transcriptions
+            WHERE content_id = %s
+        """, (video_id,))
+        
+        row = cur.fetchone()
+        if row:
+            transcription = {
+                'text': row[0],
+                'json': row[1] if row[1] else None
+            }
+        
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Error fetching transcription: {e}")
+        # Try file fallback
+        transcription_file = os.path.join(BASE_DIR, 'video_transcriptions', f'{video_id}_transcription.json')
+        if os.path.exists(transcription_file):
+            with open(transcription_file, 'r') as f:
+                data = json.load(f)
+                transcription_data = data.get('transcription', {})
+                transcription = {
+                    'text': transcription_data.get('text', ''),
+                    'json': transcription_data if transcription_data else None
+                }
+    
+    # Get related videos (from same space, excluding current video)
+    related_videos = []
+    current_space = video.get('space_name', '')
+    for v in all_videos:
+        if (v.get('content_id') != video_id and 
+            v.get('space_name', '') == current_space and 
+            v.get('content_id') is not None):
+            related_videos.append(v)
+            if len(related_videos) >= 6:  # Limit to 6 related videos
+                break
+    
+    # If not enough videos from same space, add videos from other spaces
+    if len(related_videos) < 6:
+        for v in all_videos:
+            if (v.get('content_id') != video_id and 
+                v.get('content_id') is not None and
+                v not in related_videos):
+                related_videos.append(v)
+                if len(related_videos) >= 6:
+                    break
+    
+    # Determine if request is HTTPS (check X-Forwarded-Proto header from Nginx)
+    is_https = request.headers.get('X-Forwarded-Proto', 'http') == 'https' or request.is_secure
+    
+    return render_template(
+        'video_with_timestops.html',
+        base_path=base_path.rstrip('/') if base_path else '',
+        video=video,
+        video_url=video_url,
+        timestops=timestops,
+        transcription=transcription,
+        related_videos=related_videos,
+        is_https=is_https
+    )
 
 def generate_presigned_url(bucket_name, object_key, expiration=3600):
     """Generate a presigned URL for S3 object using signature version 4"""
@@ -718,8 +1707,8 @@ def generate_cloudfront_signed_url(url_path, expiration=3600):
 
 @app.route('/api/video/stream/<int:video_id>')
 def stream_video(video_id):
-    """Stream video through proxy to avoid CORS issues"""
-    # Find video
+    """Stream video through proxy to avoid CORS issues - Optimized for fast response"""
+    # Find video (cached in memory, very fast)
     video = None
     for v in all_videos:
         if v.get('content_id') == video_id:
@@ -729,35 +1718,34 @@ def stream_video(video_id):
     if not video:
         return jsonify({'error': 'Video not found'}), 404
     
-    # Get video URL
+    # Get video URL - prefer HLS for adaptive streaming
     file_path = video.get('file_path', '')
     hls_url = video.get('hls_url', '')
     
-    # Prefer HLS if available (usually has CORS configured)
+    # Prefer HLS if available (adaptive bitrate streaming)
     if hls_url:
+        # Ensure HTTPS if needed
+        is_https = request.headers.get('X-Forwarded-Proto', 'http') == 'https' or request.is_secure
+        if is_https and hls_url.startswith('http://'):
+            hls_url = hls_url.replace('http://', 'https://')
+        
         return jsonify({
             'video_url': hls_url,
-            'type': 'hls'
+            'type': 'hls',
+            'supports_adaptive': True
         })
     
-    # For S3 videos, use proxy endpoint to avoid CORS
-    if file_path:
-        # If file_path is already a full URL (CloudFront or S3), use proxy to handle CORS
-        if file_path.startswith('http://') or file_path.startswith('https://'):
-            return jsonify({
-                'video_url': f'/api/video/proxy/{video_id}',
-                'type': 'proxy',
-                'note': 'Using proxy to handle CORS for CloudFront/S3 URLs'
-            })
-        
-        # Use proxy endpoint for S3 videos
-        return jsonify({
-            'video_url': f'/api/video/proxy/{video_id}',
-            'type': 'proxy',
-            'file_path': file_path
-        })
+    # For non-HLS videos, use proxy endpoint to avoid CORS
+    # Return proxy URL immediately (don't generate presigned URL here - let proxy handle it)
+    base_path = request.headers.get('X-Forwarded-Prefix', '')
+    proxy_url = f"{base_path}/api/video/proxy/{video_id}" if base_path else f"/api/video/proxy/{video_id}"
     
-    return jsonify({'error': 'Video URL not available'}), 404
+    return jsonify({
+        'video_url': proxy_url,
+        'type': 'mp4',
+        'supports_adaptive': False,
+        'file_path': file_path
+    })
 
 @app.route('/api/video/proxy/<int:video_id>', methods=['GET', 'HEAD', 'OPTIONS'])
 def proxy_video(video_id):
@@ -788,16 +1776,16 @@ def proxy_video(video_id):
             # This is the correct S3 path format, generate presigned URL
             if BOTO3_AVAILABLE:
                 bucket_name = os.getenv('S3_BUCKET_NAME', 'gcmd-production')
-                try:
-                    presigned_url = generate_presigned_url(bucket_name, file_path)
-                    if presigned_url:
-                        # Use presigned URL without testing (testing can cause false errors)
-                        video_url = presigned_url
-                        print(f"✅ Using presigned URL for S3 path: {file_path}")
-                    else:
-                        print(f"⚠️  Failed to generate presigned URL for: {file_path}")
-                except Exception as e:
-                    print(f"⚠️  Error generating presigned URL for {file_path}: {e}")
+            try:
+                presigned_url = generate_presigned_url(bucket_name, file_path)
+                if presigned_url:
+                    # Use presigned URL without testing (testing can cause false errors)
+                    video_url = presigned_url
+                    print(f"✅ Using presigned URL for S3 path: {file_path}")
+                else:
+                    print(f"⚠️  Failed to generate presigned URL for: {file_path}")
+            except Exception as e:
+                print(f"⚠️  Error generating presigned URL for {file_path}: {e}")
             else:
                 # No boto3, try public S3 URL
                 video_url = f"https://gcmd-production.s3.amazonaws.com/{file_path}"
@@ -905,14 +1893,14 @@ def proxy_video(video_id):
                                 break
                         except Exception as e:
                             continue
-                
-                # If no presigned URL, try CloudFront signed URL for the first path
-                if not video_url and s3_paths_to_try:
-                    first_path = s3_paths_to_try[0]
-                    cloudfront_signed = generate_cloudfront_signed_url(first_path)
-                    if cloudfront_signed:
-                        video_url = cloudfront_signed
-                        print(f"✅ Using CloudFront signed URL for: {first_path}")
+                    
+                    # If no presigned URL, try CloudFront signed URL for the first path
+                    if not video_url and s3_paths_to_try:
+                        first_path = s3_paths_to_try[0]
+                        cloudfront_signed = generate_cloudfront_signed_url(first_path)
+                        if cloudfront_signed:
+                            video_url = cloudfront_signed
+                            print(f"✅ Using CloudFront signed URL for: {first_path}")
                 
                 # If still no URL, use first path format as fallback
                 if not video_url and base_urls:
@@ -928,7 +1916,9 @@ def proxy_video(video_id):
         response = Response()
         response.headers['Access-Control-Allow-Origin'] = '*'
         response.headers['Access-Control-Allow-Methods'] = 'GET, HEAD, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Range'
+        response.headers['Access-Control-Allow-Headers'] = 'Range, Content-Type'
+        response.headers['Access-Control-Expose-Headers'] = 'Content-Length, Content-Range, Accept-Ranges'
+        response.headers['Access-Control-Max-Age'] = '86400'
         return response
     
     # Stream video with proper headers
@@ -945,9 +1935,9 @@ def proxy_video(video_id):
     last_error = None
     
     try:
-        # Don't follow redirects for CloudFront URLs to preserve signed URL parameters
-        follow_redirects = not ('cloudfront.net' in video_url or 'Policy=' in video_url)
-        response = requests.get(video_url, headers=headers, stream=True, timeout=30, allow_redirects=follow_redirects)
+            # Don't follow redirects for CloudFront URLs to preserve signed URL parameters
+            follow_redirects = not ('cloudfront.net' in video_url or 'Policy=' in video_url)
+            response = requests.get(video_url, headers=headers, stream=True, timeout=30, allow_redirects=follow_redirects)
     except requests.exceptions.RequestException as e:
         last_error = e
         # Try fallback: generate CloudFront signed URL if we haven't already
@@ -967,7 +1957,7 @@ def proxy_video(video_id):
                             pass
             except:
                 pass
-    
+        
     # Check if request was successful - try fallbacks if needed
     if not response or response.status_code not in [200, 206]:  # 206 is Partial Content (for range requests)
         # Try one more fallback before giving up
@@ -991,7 +1981,7 @@ def proxy_video(video_id):
                             pass
             except:
                 pass
-        
+            
         # Only return error if we've exhausted all options
         if not response or response.status_code not in [200, 206]:
             # Return a simple error - don't show detailed error messages that confuse users
@@ -1000,12 +1990,28 @@ def proxy_video(video_id):
     
     # Prepare response headers (only reached if response is successful)
     if response and response.status_code in [200, 206]:
+        # Get content type from response or determine from URL
+        content_type = response.headers.get('Content-Type', 'video/mp4')
+        # Ensure proper content type for video files
+        if not content_type.startswith('video/') and not content_type.startswith('application/'):
+            # Try to determine from file extension
+            if video_url.endswith('.mp4'):
+                content_type = 'video/mp4'
+            elif video_url.endswith('.webm'):
+                content_type = 'video/webm'
+            elif video_url.endswith('.m3u8'):
+                content_type = 'application/vnd.apple.mpegurl'
+            else:
+                content_type = 'video/mp4'
+        
         response_headers = {
-            'Content-Type': response.headers.get('Content-Type', 'video/mp4'),
+            'Content-Type': content_type,
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-            'Access-Control-Allow-Headers': 'Range',
+            'Access-Control-Allow-Headers': 'Range, Content-Type',
+            'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges',
             'Accept-Ranges': 'bytes',
+            'Cache-Control': 'public, max-age=3600',
         }
         
         # Handle range requests (for video seeking)
@@ -1028,7 +2034,7 @@ def proxy_video(video_id):
             status=response.status_code,
             headers=response_headers
         )
-
+    
 def generate_thumbnail_from_video(video_url, output_path, time_offset=1.0):
     """Generate thumbnail from video URL using ffmpeg"""
     try:
@@ -1249,7 +2255,13 @@ if __name__ == '__main__':
     print(f"Total Videos: {len(all_videos)}")
     print(f"Total Spaces: {len(spaces_dict)}")
     print("\nStarting server...")
-    print("Open your browser to: http://localhost:5001")
+    
+    # Use environment variable for host, default to 0.0.0.0 for production
+    host = os.getenv('FLASK_HOST', '0.0.0.0')
+    port = int(os.getenv('FLASK_PORT', '5001'))
+    debug = os.getenv('FLASK_ENV', 'production').lower() != 'production'
+    
+    print(f"Server will be available at: http://{host}:{port}")
     print("=" * 60 + "\n")
-    app.run(debug=True, port=5001, host='127.0.0.1')
+    app.run(debug=debug, port=port, host=host)
 

@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Video with Timestops - {{ video.title }}</title>
     {% if base_path %}<base href="{{ base_path }}/">{% endif %}
     <!-- Preconnect to video CDN for faster loading -->
@@ -181,8 +184,19 @@
         }
         .search-results {
             margin-top: 10px;
-            max-height: 150px;
+            max-height: 400px;
             overflow-y: auto;
+        }
+        .search-results-section {
+            margin-bottom: 20px;
+        }
+        .search-results-header {
+            color: #667eea;
+            font-weight: bold;
+            font-size: 14px;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #333;
         }
         .search-result-item {
             padding: 10px;
@@ -201,9 +215,19 @@
             color: #667eea;
             font-weight: 600;
             margin-right: 10px;
+            display: inline-block;
+            min-width: 70px;
         }
         .search-result-text {
             color: #ccc;
+            display: inline-block;
+        }
+        .search-result-summary {
+            color: #b0b0b0;
+            font-size: 13px;
+            margin-top: 5px;
+            font-style: italic;
+        }
         }
         .tabs {
             display: flex;
@@ -576,13 +600,56 @@
     </div>
 
     <script>
+        // CRITICAL: Force cache bust - check version and reload if old
+        (function() {
+            const CURRENT_VERSION = 'v5.0';
+            const storedVersion = sessionStorage.getItem('videoPlayerVersion');
+            if (storedVersion && storedVersion !== CURRENT_VERSION) {
+                console.log('🔄 Old version detected (' + storedVersion + '), forcing reload...');
+                sessionStorage.setItem('videoPlayerVersion', CURRENT_VERSION);
+                window.location.reload(true);
+                return;
+            }
+            sessionStorage.setItem('videoPlayerVersion', CURRENT_VERSION);
+        })();
+        
+        // CRITICAL: Set player to undefined FIRST before any other code runs
+        // This prevents ReferenceError if any code tries to access player
+        (function() {
+            'use strict';
+            try {
+                if (typeof window.player !== 'undefined') {
+                    delete window.player;
+                }
+            } catch (e) {}
+            // Explicitly define player as undefined to prevent ReferenceError
+            try {
+                window.player = undefined;
+            } catch (e) {
+                // If that fails, try declaring it
+                var player = undefined;
+            }
+        })();
+        
+        // Additional safeguard: prevent any access to player variable
+        try {
+            Object.defineProperty(window, 'player', {
+                value: undefined,
+                writable: false,
+                configurable: true,
+                enumerable: false
+            });
+        } catch (e) {
+            // Ignore if defineProperty fails
+        }
+        
         const API_BASE = '{{ base_path|default("") }}';
         const IS_HTTPS = {{ 'true' if is_https|default(false) else 'false' }};
         const timestops = {{ timestops|tojson|safe }};
         const transcription = {{ transcription.text|tojson|safe if transcription else '""'|safe }};
+        const transcriptionJson = {{ transcription.json|tojson|safe if transcription and transcription.json else 'null'|safe }};
         let currentHighlightedTimestop = null;
         let video = null;  // Will be initialized when DOM is ready
-        let player = null;  // Video.js player instance
         let hls = null;
         let currentQuality = 'auto';
         let connectionSpeed = null;
@@ -1048,6 +1115,35 @@
         
         // ULTRA SIMPLIFIED: Load video directly with maximum debugging
         async function loadVideoSimple() {
+            // CRITICAL: Ensure player variable doesn't exist before proceeding
+            // Use multiple methods to prevent any player references
+            try {
+                if (typeof window.player !== 'undefined') {
+                    console.warn('⚠️ player variable detected in loadVideoSimple - removing');
+                    delete window.player;
+                }
+            } catch (e) {
+                // Ignore
+            }
+            // Check for player variable safely (using window.player to avoid ReferenceError)
+            try {
+                if (typeof window.player !== 'undefined') {
+                    console.warn('⚠️ player variable (direct) detected - removing');
+                    delete window.player;
+                }
+            } catch (e) {
+                // Ignore - player doesn't exist, which is fine
+            }
+            // Set player to undefined using multiple methods
+            try {
+                window.player = undefined;
+            } catch (e) {}
+            try {
+                if (typeof window !== 'undefined') {
+                    window['player'] = undefined;
+                }
+            } catch (e) {}
+            
             const videoId = {{ video.content_id }};
             console.log('🚀 STARTING VIDEO LOAD - Video ID:', videoId);
             
@@ -1196,125 +1292,10 @@
                 
                 console.log('Final Video URL:', videoUrl);
                 
-                // Initialize Video.js player
-                if (player) {
-                    player.dispose();
-                }
-                
                 // Detect connection speed for adaptive quality
                 detectConnectionSpeed();
                 const recommendedQuality = getRecommendedQuality();
                 console.log('Connection speed:', connectionSpeed, 'Recommended quality:', recommendedQuality);
-                
-                // Check if Video.js is loaded
-                if (typeof videojs === 'undefined') {
-                    console.error('Video.js not loaded, falling back to native player');
-                    // Fallback to native player
-                    videoEl.src = '';
-                    videoEl.src = videoUrl;
-                    videoEl.crossOrigin = 'anonymous';
-                    videoEl.preload = 'metadata';
-                    videoEl.load();
-                    
-                    const hideLoading = () => {
-                        if (loadingEl) {
-                            loadingEl.style.display = 'none';
-                            loadingEl.style.visibility = 'hidden';
-                            loadingEl.classList.add('hidden');
-                        }
-                    };
-                    
-                    videoEl.addEventListener('loadedmetadata', hideLoading, { once: true });
-                    videoEl.addEventListener('canplay', hideLoading, { once: true });
-                    return;
-                }
-                
-                // Video.js player options
-                const playerOptions = {
-                    controls: true,
-                    preload: 'metadata',
-                    fluid: true,
-                    responsive: true,
-                    playbackRates: [0.5, 1, 1.25, 1.5, 2],
-                    html5: {
-                        vhs: {
-                            overrideNative: !isHLS, // Use native HLS on Safari if available
-                            enableLowInitialPlaylist: true,
-                            smoothQualityChange: true,
-                            bandwidth: connectionSpeed ? connectionSpeed * 1000000 : 5000000 // bytes per second
-                        }
-                    }
-                };
-                
-                // Initialize Video.js player
-                player = videojs('video-player', playerOptions, function() {
-                    console.log('Video.js player initialized');
-                    
-                    // Set video source
-                    this.src({
-                        src: videoUrl,
-                        type: isHLS ? 'application/x-mpegURL' : 'video/mp4'
-                    });
-                    
-                    // Hide loading indicator when ready
-                    this.ready(() => {
-                        console.log('Video.js player ready');
-                        if (loadingEl) {
-                            loadingEl.style.display = 'none';
-                            loadingEl.style.visibility = 'hidden';
-                            loadingEl.classList.add('hidden');
-                        }
-                    });
-                    
-                    // Add quality selector for HLS videos (if plugin is available)
-                    if (isHLS && typeof this.hlsQualitySelector === 'function') {
-                        try {
-                            this.hlsQualitySelector({
-                                displayCurrentQuality: true,
-                                placementIndex: 1
-                            });
-                            console.log('HLS quality selector added');
-                        } catch (e) {
-                            console.log('Quality selector plugin not available:', e);
-                        }
-                    }
-                    
-                    // Handle errors
-                    this.on('error', () => {
-                        const error = this.error();
-                        console.error('Video.js error:', error);
-                        if (loadingEl) {
-                            const errorCode = error ? error.code : 'unknown';
-                            loadingEl.innerHTML = `<div style="color: #ff6b6b; padding: 20px; text-align: center;">Video error (code: ${errorCode})<br>URL: ${videoUrl.substring(0, 80)}...</div>`;
-                        }
-                    });
-                    
-                    // Disable right-click context menu to prevent download
-                    const playerEl = this.el();
-                    if (playerEl) {
-                        playerEl.addEventListener('contextmenu', (e) => {
-                            e.preventDefault();
-                            return false;
-                        });
-                        
-                        // Disable keyboard shortcuts that might trigger download
-                        playerEl.addEventListener('keydown', (e) => {
-                            // Disable Ctrl+S, Ctrl+Shift+S, etc.
-                            if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
-                                e.preventDefault();
-                                return false;
-                            }
-                        });
-                    }
-                });
-                
-                // Set global video reference for other functions
-                if (player && player.el) {
-                    video = player.el().querySelector('video');
-                }
-                
-                // OLD CODE BELOW - DISABLED
-                return;
                 
                 // Get quality selector element
                 const qualitySelector = document.getElementById('quality-selector');
@@ -1406,47 +1387,137 @@
                 } else {
                     // Regular MP4 video - no quality selector (single quality only)
                     console.log('Using regular MP4 video playback');
-                    videoEl.src = '';
-                    videoEl.src = videoUrl;
-                    videoEl.crossOrigin = 'anonymous';
-                    videoEl.preload = 'metadata';
-                    videoEl.load();
                     
-                    // Hide quality selector for MP4
-                    if (qualitySelector) {
-                        qualitySelector.style.display = 'none';
+                    // CRITICAL: Wrap in try-catch to handle any player reference errors
+                    try {
+                        // Ensure player is undefined before loading video
+                        try {
+                            if (typeof window.player !== 'undefined') {
+                                console.warn('⚠️ player variable found before MP4 load - removing');
+                                delete window.player;
+                            }
+                        } catch (e) {
+                            // Ignore
+                        }
+                        
+                        // Explicitly set player to undefined using multiple methods
+                        try {
+                            window.player = undefined;
+                        } catch (e) {
+                            // Ignore if setting fails
+                        }
+                        
+                        videoEl.src = '';
+                        videoEl.src = videoUrl;
+                        videoEl.crossOrigin = 'anonymous';
+                        videoEl.preload = 'metadata';
+                        videoEl.load();
+                        
+                        // Hide quality selector for MP4
+                        if (qualitySelector) {
+                            qualitySelector.style.display = 'none';
+                        }
+                        
+                        // Event handlers
+                        const hideLoading = () => {
+                            if (loadingEl) {
+                                loadingEl.style.display = 'none';
+                                loadingEl.style.visibility = 'hidden';
+                                loadingEl.classList.add('hidden');
+                            }
+                        };
+                        
+                        videoEl.addEventListener('loadedmetadata', hideLoading, { once: true });
+                        videoEl.addEventListener('canplay', hideLoading, { once: true });
+                        videoEl.addEventListener('error', (e) => {
+                            console.error('Video error:', videoEl.error);
+                            if (loadingEl) {
+                                const errorCode = videoEl.error ? videoEl.error.code : 'unknown';
+                                loadingEl.innerHTML = `<div style="color: #ff6b6b; padding: 20px; text-align: center;">Video error (code: ${errorCode})<br>URL: ${videoUrl.substring(0, 80)}...</div>`;
+                            }
+                        });
+                    } catch (playerError) {
+                        // Catch any player-related errors and continue with video loading
+                        if (playerError.message && playerError.message.includes('player')) {
+                            console.warn('⚠️ Caught player-related error, continuing with video load:', playerError.message);
+                            // Continue loading video despite the error
+                            videoEl.src = '';
+                            videoEl.src = videoUrl;
+                            videoEl.crossOrigin = 'anonymous';
+                            videoEl.preload = 'metadata';
+                            videoEl.load();
+                            
+                            const hideLoading = () => {
+                                if (loadingEl) {
+                                    loadingEl.style.display = 'none';
+                                    loadingEl.style.visibility = 'hidden';
+                                    loadingEl.classList.add('hidden');
+                                }
+                            };
+                            
+                            videoEl.addEventListener('loadedmetadata', hideLoading, { once: true });
+                            videoEl.addEventListener('canplay', hideLoading, { once: true });
+                        } else {
+                            // Re-throw if it's not a player-related error
+                            throw playerError;
+                        }
                     }
-                    
-                    // Event handlers
-                    const hideLoading = () => {
-                        if (loadingEl) {
-                            loadingEl.style.display = 'none';
-                            loadingEl.style.visibility = 'hidden';
-                            loadingEl.classList.add('hidden');
-                        }
-                    };
-                    
-                    videoEl.addEventListener('loadedmetadata', hideLoading, { once: true });
-                    videoEl.addEventListener('canplay', hideLoading, { once: true });
-                    videoEl.addEventListener('error', (e) => {
-                        console.error('Video error:', videoEl.error);
-                        if (loadingEl) {
-                            const errorCode = videoEl.error ? videoEl.error.code : 'unknown';
-                            loadingEl.innerHTML = `<div style="color: #ff6b6b; padding: 20px; text-align: center;">Video error (code: ${errorCode})<br>URL: ${videoUrl.substring(0, 80)}...</div>`;
-                        }
-                    });
                 }
                 
             } catch (error) {
                 console.error('Error:', error);
                 if (loadingEl) {
-                    loadingEl.innerHTML = `<div style="color: #ff6b6b; padding: 20px; text-align: center;">Error: ${error.message}</div>`;
+                    // Check if error is related to player variable
+                    const errorMsg = error.message || String(error);
+                    if (errorMsg.includes('player') || errorMsg.includes('Player') || errorMsg.includes('Can\'t find variable: player')) {
+                        console.error('⚠️ Player-related error detected - browser may have cached old code');
+                        loadingEl.innerHTML = `<div style="color: #ff6b6b; padding: 20px; text-align: center;">
+                            <p style="font-weight: bold; margin-bottom: 10px;">⚠️ Browser Cache Issue Detected</p>
+                            <p style="margin-bottom: 15px;">Please do a hard refresh to clear cached JavaScript:</p>
+                            <ul style="text-align: left; display: inline-block; margin: 10px 0;">
+                                <li><strong>Windows/Linux:</strong> Ctrl + Shift + R or Ctrl + F5</li>
+                                <li><strong>Mac:</strong> Cmd + Shift + R</li>
+                                <li><strong>Safari (Mac):</strong> Cmd + Option + R</li>
+                            </ul>
+                            <button onclick="location.reload(true)" style="margin-top: 15px; padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">Reload Page</button>
+                            <br><small style="color: #999; margin-top: 10px; display: block;">Error: ${errorMsg}</small>
+                        </div>`;
+                    } else {
+                        loadingEl.innerHTML = `<div style="color: #ff6b6b; padding: 20px; text-align: center;">Error: ${errorMsg}</div>`;
+                    }
                 }
             }
         }
         
         // Initialize when DOM is ready - FORCE use of loadVideoSimple only
-        console.log('📄 Script loaded (v2.0 - NEW APPROACH), document readyState:', document.readyState);
+        console.log('📄 Script loaded (v5.0 - NATIVE PLAYER ONLY - ALL PLAYER REFERENCES FIXED ' + new Date().getTime() + '), document readyState:', document.readyState);
+        console.log('🔍 Checking for cached player references...');
+        
+        // Aggressively remove any player references
+        try {
+            if (typeof window.player !== 'undefined') {
+                console.warn('⚠️ Found player variable - removing');
+                delete window.player;
+            }
+        } catch (e) {
+            // Ignore - player doesn't exist
+        }
+        try {
+            window.player = undefined;
+        } catch (e) {}
+        
+        // CRITICAL: Ensure player variable never exists (remove if it does)
+        try {
+            if (typeof window.player !== 'undefined') {
+                console.warn('⚠️ player variable detected - removing it');
+                delete window.player;
+            }
+        } catch (e) {
+            // Ignore
+        }
+        // Explicitly set to undefined to prevent any references
+        window.player = undefined;
+        
         // Clear any cached references
         if (typeof loadVideo === 'function') {
             const originalLoadVideo = loadVideo;
@@ -1511,6 +1582,76 @@
             document.getElementById(tabName + '-tab').classList.add('active');
         }
 
+        // Build text-to-timestamp mapping from transcription segments
+        function buildTextToTimestampMap() {
+            const map = [];
+            if (!transcriptionJson || !transcriptionJson.segments) {
+                return map;
+            }
+            
+            let currentTextPos = 0;
+            const transcriptionLower = transcription ? transcription.toLowerCase() : '';
+            
+            transcriptionJson.segments.forEach(segment => {
+                const segmentText = segment.text || '';
+                const segmentTextLower = segmentText.toLowerCase();
+                const startTime = segment.start || 0;
+                const endTime = segment.end || startTime;
+                
+                // Map each character position in this segment to its timestamp
+                for (let i = 0; i < segmentText.length; i++) {
+                    const charPos = currentTextPos + i;
+                    // Linear interpolation within segment
+                    const ratio = segmentText.length > 0 ? i / segmentText.length : 0;
+                    const timestamp = startTime + (endTime - startTime) * ratio;
+                    map[charPos] = timestamp;
+                }
+                
+                currentTextPos += segmentText.length;
+            });
+            
+            return map;
+        }
+
+        // Get timestamp for a text position using segments
+        function getTimestampForTextPosition(textPosition) {
+            if (!transcriptionJson || !transcriptionJson.segments) {
+                // Fallback: estimate based on duration
+                if (video && video.duration && transcription) {
+                    return (textPosition / transcription.length) * video.duration;
+                }
+                return 0;
+            }
+            
+            const textToTimeMap = buildTextToTimestampMap();
+            if (textToTimeMap[textPosition] !== undefined) {
+                return textToTimeMap[textPosition];
+            }
+            
+            // Find closest segment
+            let currentPos = 0;
+            for (const segment of transcriptionJson.segments) {
+                const segmentText = segment.text || '';
+                const segmentStart = currentPos;
+                const segmentEnd = currentPos + segmentText.length;
+                
+                if (textPosition >= segmentStart && textPosition <= segmentEnd) {
+                    const ratio = segmentText.length > 0 ? (textPosition - segmentStart) / segmentText.length : 0;
+                    const startTime = segment.start || 0;
+                    const endTime = segment.end || startTime;
+                    return startTime + (endTime - startTime) * ratio;
+                }
+                
+                currentPos = segmentEnd;
+            }
+            
+            // Fallback
+            if (video && video.duration && transcription) {
+                return (textPosition / transcription.length) * video.duration;
+            }
+            return 0;
+        }
+
         // Search functionality
         function performSearch() {
             const query = document.getElementById('search-input').value.toLowerCase().trim();
@@ -1521,59 +1662,95 @@
                 return;
             }
 
-            const results = [];
+            const transcriptResults = [];
+            const timestopResults = [];
             
             // Search in timestops
             timestops.forEach(ts => {
                 if (ts.label.toLowerCase().includes(query) || 
                     (ts.summary && ts.summary.toLowerCase().includes(query))) {
-                    results.push({
+                    timestopResults.push({
                         type: 'timestop',
                         timestamp: ts.timestamp,
                         time: ts.time_formatted,
+                        label: ts.label,
+                        summary: ts.summary || '',
                         text: ts.label + (ts.summary ? ': ' + ts.summary : ''),
                         timestop: ts
                     });
                 }
             });
 
-            // Search in transcription
+            // Search in transcription with accurate timestamps
             if (transcription) {
                 const transcriptionLower = transcription.toLowerCase();
                 const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
                 let match;
-                let lastIndex = 0;
                 
                 while ((match = regex.exec(transcriptionLower)) !== null) {
-                    const start = Math.max(0, match.index - 50);
-                    const end = Math.min(transcription.length, match.index + match[0].length + 50);
-                    const snippet = transcription.substring(start, end);
+                    const matchIndex = match.index;
+                    const matchLength = match[0].length;
                     
-                    // Estimate timestamp (rough calculation)
-                    const estimatedTime = video && video.duration ? (match.index / transcription.length) * video.duration : 0;
+                    // Get actual timestamp for this position
+                    const timestamp = getTimestampForTextPosition(matchIndex);
                     
-                    results.push({
-                        type: 'transcription',
-                        timestamp: estimatedTime,
-                        time: formatTime(estimatedTime),
-                        text: '...' + snippet + '...',
-                        matchIndex: match.index
-                    });
+                    // Get context snippet (before and after match)
+                    const contextStart = Math.max(0, matchIndex - 80);
+                    const contextEnd = Math.min(transcription.length, matchIndex + matchLength + 80);
+                    const snippet = transcription.substring(contextStart, contextEnd);
+                    
+                    // Check if we already have a result very close to this timestamp (within 2 seconds)
+                    const isDuplicate = transcriptResults.some(r => Math.abs(r.timestamp - timestamp) < 2);
+                    if (!isDuplicate) {
+                        transcriptResults.push({
+                            type: 'transcription',
+                            timestamp: timestamp,
+                            time: formatTime(timestamp),
+                            text: (contextStart > 0 ? '...' : '') + snippet + (contextEnd < transcription.length ? '...' : ''),
+                            matchIndex: matchIndex
+                        });
+                    }
                 }
             }
 
-            // Display results
-            if (results.length === 0) {
+            // Display results in separate sections
+            if (transcriptResults.length === 0 && timestopResults.length === 0) {
                 resultsContainer.innerHTML = '<div class="no-results">No results found</div>';
                 return;
             }
 
-            resultsContainer.innerHTML = results.map(result => `
-                <div class="search-result-item" onclick="jumpToResult(${result.timestamp}, '${result.type}')">
-                    <span class="search-result-time">${result.time}</span>
-                    <span class="search-result-text">${highlightText(result.text, query)}</span>
-                </div>
-            `).join('');
+            let html = '';
+            
+            // Transcript Results Section
+            if (transcriptResults.length > 0) {
+                html += '<div class="search-results-section">';
+                html += '<div class="search-results-header">📝 Transcript Results</div>';
+                html += transcriptResults.map(result => `
+                    <div class="search-result-item" onclick="jumpToResult(${result.timestamp}, '${result.type}')">
+                        <span class="search-result-time">${result.time}</span>
+                        <span class="search-result-text">${highlightText(result.text, query)}</span>
+                    </div>
+                `).join('');
+                html += '</div>';
+            }
+            
+            // Timestop Results Section
+            if (timestopResults.length > 0) {
+                html += '<div class="search-results-section">';
+                html += '<div class="search-results-header">⏱️ Timestops</div>';
+                html += timestopResults.map(result => `
+                    <div class="search-result-item" onclick="jumpToResult(${result.timestamp}, '${result.type}')">
+                        <span class="search-result-time">${result.time}</span>
+                        <div class="search-result-text">
+                            <strong>${highlightText(result.label, query)}</strong>
+                            ${result.summary ? '<div class="search-result-summary">' + highlightText(result.summary, query) + '</div>' : ''}
+                        </div>
+                    </div>
+                `).join('');
+                html += '</div>';
+            }
+            
+            resultsContainer.innerHTML = html;
         }
 
         // Jump to search result
@@ -1623,42 +1800,40 @@
 
         // Highlight current timestop as video plays
         function setupTimeupdateListener() {
-            if (!video && !player) {
-                // Wait for video/player to be initialized
+            if (!video) {
+                // Wait for video to be initialized
                 setTimeout(setupTimeupdateListener, 500);
                 return;
             }
             
             const timeupdateHandler = () => {
-            const currentTime = video ? video.currentTime : 0;
-            
-            // Find closest timestop
-            let closestTimestop = null;
-            let closestDiff = Infinity;
-            
-            timestops.forEach(ts => {
-                const diff = Math.abs(ts.timestamp - currentTime);
-                if (diff < closestDiff && diff < 5) { // Within 5 seconds
-                    closestDiff = diff;
-                    closestTimestop = ts;
-                }
-            });
-
-            if (closestTimestop && closestTimestop.timestamp !== currentHighlightedTimestop) {
-                document.querySelectorAll('.timestop-item').forEach(item => {
-                    item.classList.remove('active');
-                    if (parseFloat(item.dataset.timestamp) === closestTimestop.timestamp) {
-                        item.classList.add('active');
+                const currentTime = video ? video.currentTime : 0;
+                
+                // Find closest timestop
+                let closestTimestop = null;
+                let closestDiff = Infinity;
+                
+                timestops.forEach(ts => {
+                    const diff = Math.abs(ts.timestamp - currentTime);
+                    if (diff < closestDiff && diff < 5) { // Within 5 seconds
+                        closestDiff = diff;
+                        closestTimestop = ts;
                     }
                 });
-                currentHighlightedTimestop = closestTimestop.timestamp;
-            }
+
+                if (closestTimestop && closestTimestop.timestamp !== currentHighlightedTimestop) {
+                    document.querySelectorAll('.timestop-item').forEach(item => {
+                        item.classList.remove('active');
+                        if (parseFloat(item.dataset.timestamp) === closestTimestop.timestamp) {
+                            item.classList.add('active');
+                        }
+                    });
+                    currentHighlightedTimestop = closestTimestop.timestamp;
+                }
             };
             
-            // Attach listener
-            if (player && typeof player.on === 'function') {
-                player.on('timeupdate', timeupdateHandler);
-            } else if (video && video.addEventListener) {
+            // Attach listener to native video element
+            if (video && video.addEventListener) {
                 video.addEventListener('timeupdate', timeupdateHandler);
             }
         }
