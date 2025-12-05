@@ -303,18 +303,138 @@ def fetch_youtube_videos(api_key, channel_id=None, max_results=None):
         traceback.print_exc()
         return []
 
+def load_aws_videos_from_database():
+    """Load AWS videos from database that aren't matched to YouTube"""
+    try:
+        import psycopg2
+        with open('production_rds_credentials.json', 'r') as f:
+            creds = json.load(f)
+        
+        conn = psycopg2.connect(
+            host=creds['host'],
+            port=creds['port'],
+            user=creds['username'],
+            password=creds['password'],
+            database=creds.get('dbInstanceIdentifier', 'staycurrentmd'),
+            sslmode='prefer'
+        )
+        cur = conn.cursor()
+        
+        # Query from 'content' table
+        cur.execute("""
+            SELECT 
+                c.id as content_id,
+                c.content_title as title,
+                c.description,
+                s.name as space_name,
+                cf.file as file_path,
+                NULL as hash_filename,
+                cf.thumbnail,
+                cf.hls_url,
+                NULL as s3_path,
+                NULL as bucket,
+                NULL as folder,
+                c.created_at,
+                c.updated_at
+            FROM content c
+            LEFT JOIN spaces s ON c.space_id = s.id
+            LEFT JOIN content_file cf ON c.id = cf.content_id
+            WHERE c.content_type_id = 3
+                AND s.name IS NOT NULL AND s.name != ''
+            ORDER BY c.id
+        """)
+        
+        aws_videos = []
+        for row in cur.fetchall():
+            aws_videos.append({
+                'content_id': row[0],
+                'title': row[1] or '',
+                'description': row[2] or '',
+                'space_name': row[3] or '',
+                'file_path': row[4] or '',
+                'hash_filename': row[5],
+                'thumbnail': row[6] or '',
+                'hls_url': row[7] or '',
+                's3_path': row[8],
+                'bucket': row[9],
+                'folder': row[10],
+                'created_at': str(row[11]) if row[11] else '',
+                'updated_at': str(row[12]) if row[12] else '',
+                'type': 'aws',
+                'supports_adaptive': bool(row[7]),  # Has HLS URL
+                'youtube_id': None,
+                'youtube_url': None,
+                'youtube_embed_url': None
+            })
+        
+        cur.close()
+        conn.close()
+        return aws_videos
+    except Exception as e:
+        print(f"⚠️  Error loading AWS videos from database: {e}")
+        return []
+
+def find_unmatched_aws_videos(aws_videos, youtube_videos):
+    """Find AWS videos that don't have a YouTube match based on title similarity"""
+    def normalize_title(title):
+        if not title:
+            return ""
+        return title.lower().strip().replace(" - staycurrentmd", "").replace(" | staycurrentmd", "")
+    
+    def similarity_score(str1, str2):
+        if not str1 or not str2:
+            return 0.0
+        return SequenceMatcher(None, str1, str2).ratio()
+    
+    unmatched = []
+    for aws_video in aws_videos:
+        aws_title = normalize_title(aws_video.get('title', ''))
+        found_match = False
+        
+        for yt_video in youtube_videos:
+            yt_title = normalize_title(yt_video.get('title', ''))
+            if similarity_score(aws_title, yt_title) > 0.85:
+                found_match = True
+                break
+        
+        if not found_match:
+            unmatched.append(aws_video)
+    
+    return unmatched
+
 # Load video data
 def load_video_data():
-    """Load video metadata from YouTube API"""
+    """Load video metadata from YouTube API and merge with unmatched AWS videos"""
     # Fetch videos from YouTube - fetch ALL videos by default
     channel_id = os.getenv('YOUTUBE_CHANNEL_ID')
     max_results_env = os.getenv('YOUTUBE_MAX_RESULTS')
     max_results = int(max_results_env) if max_results_env else None  # None = fetch all videos
     
-    if not YOUTUBE_API_KEY:
-        print("⚠️  YOUTUBE_API_KEY not set. Set environment variable YOUTUBE_API_KEY to use YouTube integration.")
-        print("   Falling back to JSON file...")
-        # Fallback to JSON file
+    youtube_videos = []
+    if YOUTUBE_API_KEY:
+        youtube_videos = fetch_youtube_videos(YOUTUBE_API_KEY, channel_id, max_results)
+        if youtube_videos:
+            print(f"✅ Loaded {len(youtube_videos)} videos from YouTube")
+    else:
+        print("⚠️  YOUTUBE_API_KEY not set. Skipping YouTube videos.")
+    
+    # Load unmatched AWS videos
+    aws_videos = load_aws_videos_from_database()
+    if aws_videos:
+        print(f"✅ Loaded {len(aws_videos)} videos from AWS database")
+        
+        # Find unmatched AWS videos
+        unmatched_aws = find_unmatched_aws_videos(aws_videos, youtube_videos)
+        print(f"✅ Found {len(unmatched_aws)} unmatched AWS videos")
+        
+        # Merge YouTube and unmatched AWS videos
+        all_videos = youtube_videos + unmatched_aws
+        print(f"✅ Total videos: {len(all_videos)} (YouTube: {len(youtube_videos)}, AWS: {len(unmatched_aws)})")
+        return all_videos
+    
+    # Fallback to JSON file if database fails
+    if not youtube_videos:
+        print("⚠️  No videos from YouTube, trying JSON fallback...")
         try:
             with open('all_video_metadata_from_database.json', 'r') as f:
                 return json.load(f)
@@ -322,19 +442,7 @@ def load_video_data():
             print("⚠️  Fallback JSON file not found")
             return []
     
-    videos = fetch_youtube_videos(YOUTUBE_API_KEY, channel_id, max_results)
-    
-    if not videos:
-        print("⚠️  No videos fetched from YouTube, trying fallback...")
-        # Fallback to JSON file if YouTube fails
-        try:
-            with open('all_video_metadata_from_database.json', 'r') as f:
-                return json.load(f)
-        except FileNotFoundError:
-            print("⚠️  Fallback JSON file not found")
-            return []
-    
-    return videos
+    return youtube_videos
 
 def categorize_by_space(videos):
     """Group videos by space name"""

@@ -42,25 +42,28 @@ def load_aws_videos_from_database():
         )
         cur = conn.cursor()
         
-        # Query all videos from database with full details
+        # Query all videos from database using content table
         cur.execute("""
             SELECT 
-                v.content_id,
-                v.title,
-                v.description,
-                v.space_name,
-                v.file_path,
-                v.hash_filename,
-                v.thumbnail,
-                v.hls_url,
-                v.s3_path,
-                v.bucket,
-                v.folder,
-                v.created_at,
-                v.updated_at
-            FROM videos v
-            WHERE v.space_name IS NOT NULL AND v.space_name != ''
-            ORDER BY v.content_id
+                c.id as content_id,
+                c.content_title as title,
+                c.description,
+                s.name as space_name,
+                cf.file as file_path,
+                NULL as hash_filename,
+                cf.thumbnail,
+                cf.hls_url,
+                NULL as s3_path,
+                NULL as bucket,
+                NULL as folder,
+                c.created_at,
+                c.updated_at
+            FROM content c
+            LEFT JOIN spaces s ON c.space_id = s.id
+            LEFT JOIN content_file cf ON c.id = cf.content_id
+            WHERE c.content_type_id = 3
+                AND s.name IS NOT NULL AND s.name != ''
+            ORDER BY c.id
         """)
         
         aws_videos = []
