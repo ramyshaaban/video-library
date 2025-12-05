@@ -1834,20 +1834,17 @@
             return fallbackStart;
         }
 
-        // Jump to search result - seeks to sentence start minus a few seconds
+        // Jump to search result - seeks 5 seconds before the searched term
         function jumpToResult(timestamp, type, matchIndex = null) {
             let seekTime = timestamp;
             
-            // For transcript results, find sentence start and go back a few seconds
-            if (type === 'transcription' && matchIndex !== null && transcription) {
-                const sentenceStartIndex = findSentenceStart(matchIndex);
-                const sentenceStartTime = getTimestampForTextPosition(sentenceStartIndex);
-                
-                // Go back 2-3 seconds before sentence start, but not before video start
-                seekTime = Math.max(0, sentenceStartTime - 2.5);
+            // For transcript results, go back 5 seconds before the match
+            if (type === 'transcription') {
+                // Go back 5 seconds before the match timestamp, but not before video start
+                seekTime = Math.max(0, timestamp - 5);
             } else if (type === 'timestop') {
-                // For timestops, go back 2 seconds
-                seekTime = Math.max(0, timestamp - 2);
+                // For timestops, go back 5 seconds as well
+                seekTime = Math.max(0, timestamp - 5);
             }
             
             seekToTime(seekTime);
