@@ -240,8 +240,10 @@ def fetch_youtube_videos(api_key, channel_id=None, max_results=None):
                                 duration_seconds = hours * 3600 + minutes * 60 + seconds
                             
                             # Create video object matching our structure
-                            # Generate a numeric content_id from YouTube video ID hash
-                            content_id = abs(hash(video_id)) % 1000000  # Use hash to get numeric ID
+                            # Generate a deterministic numeric content_id from YouTube video ID
+                            # Use a simple hash that's consistent across Python sessions
+                            import hashlib
+                            content_id = int(hashlib.md5(video_id.encode()).hexdigest()[:8], 16) % 1000000
                             video = {
                                 'content_id': content_id,
                                 'youtube_id': video_id,
@@ -1632,9 +1634,17 @@ def search_all_videos():
 @app.route('/api/video/<int:video_id>')
 def get_video(video_id):
     """API endpoint to get a specific video"""
+    # Try by content_id first
     for video in all_videos:
         if video.get('content_id') == video_id:
             return jsonify(video)
+    
+    # If not found, try by YouTube ID as fallback
+    for video in all_videos:
+        youtube_id = video.get('youtube_id') or (video.get('file_path', '').replace('youtube:', '') if video.get('file_path', '').startswith('youtube:') else None)
+        if youtube_id and (youtube_id == str(video_id) or youtube_id == video_id):
+            return jsonify(video)
+    
     return jsonify({'error': 'Video not found'}), 404
 
 @app.route('/api/video/<int:video_id>/timestops')
