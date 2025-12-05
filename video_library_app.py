@@ -1702,12 +1702,20 @@ def video_with_timestops(video_id):
     """Video page with timestops, transcription, and search"""
     base_path = request.headers.get('X-Forwarded-Prefix', '')
     
-    # Find video
+    # Find video by content_id first, then by YouTube ID as fallback
     video = None
     for v in all_videos:
         if v.get('content_id') == video_id:
             video = v
             break
+    
+    # If not found by content_id, try finding by YouTube ID (for YouTube videos)
+    if not video:
+        for v in all_videos:
+            youtube_id = v.get('youtube_id') or (v.get('file_path', '').replace('youtube:', '') if v.get('file_path', '').startswith('youtube:') else None)
+            if youtube_id and (youtube_id == str(video_id) or youtube_id == video_id):
+                video = v
+                break
     
     if not video:
         return jsonify({'error': 'Video not found'}), 404
