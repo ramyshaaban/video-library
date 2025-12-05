@@ -373,6 +373,12 @@
             flex-shrink: 0;
             overflow: hidden;
         }
+        .related-videos-desktop {
+            display: block;
+        }
+        .related-videos-mobile {
+            display: none;
+        }
         .related-videos-title {
             font-size: 20px;
             margin-bottom: 15px;
@@ -498,7 +504,11 @@
             .right-panel {
                 order: 2;
             }
-            .related-videos-section {
+            .related-videos-desktop {
+                display: none;
+            }
+            .related-videos-mobile {
+                display: block;
                 order: 3;
             }
             .video-container {
@@ -534,12 +544,16 @@
             }
             .left-panel {
                 order: 1;
-                gap: 15px;
+                gap: 0;
             }
             .right-panel {
                 order: 2;
             }
-            .related-videos-section {
+            .related-videos-desktop {
+                display: none;
+            }
+            .related-videos-mobile {
+                display: block;
                 order: 3;
             }
             .video-container {
@@ -567,7 +581,7 @@
         </div>
 
         <div class="main-layout">
-            <!-- Left Panel: Video and Related Videos -->
+            <!-- Left Panel: Video -->
             <div class="left-panel">
                 <div class="video-container">
                     <div class="video-loading" id="video-loading">
@@ -585,9 +599,9 @@
                     </video>
                 </div>
                 
-                <!-- Related Videos Section - Horizontal Carousel -->
+                <!-- Related Videos Section - Horizontal Carousel (Desktop only, hidden on mobile) -->
                 {% if related_videos and related_videos|length > 0 %}
-                <div class="related-videos-section">
+                <div class="related-videos-section related-videos-desktop">
                     <h2 class="related-videos-title">Related Videos</h2>
                     <div class="related-videos-grid">
                         {% for related_video in related_videos %}
@@ -657,6 +671,36 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Related Videos Section - Mobile (shown at bottom on mobile) -->
+            {% if related_videos and related_videos|length > 0 %}
+            <div class="related-videos-section related-videos-mobile">
+                <h2 class="related-videos-title">Related Videos</h2>
+                <div class="related-videos-grid">
+                    {% for related_video in related_videos %}
+                    <div class="related-video-card" onclick="openVideoPage({{ related_video.content_id }})">
+                        <div class="related-video-thumbnail">
+                            {% if related_video.thumbnail %}
+                            <img src="{{ related_video.thumbnail }}" alt="{{ related_video.title }}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            {% endif %}
+                            <div class="related-video-placeholder" style="display: {% if related_video.thumbnail %}none{% else %}flex{% endif %};">
+                                <span>▶</span>
+                            </div>
+                            <div class="related-video-overlay">
+                                <span class="play-icon">▶</span>
+                            </div>
+                        </div>
+                        <div class="related-video-info">
+                            <h3 class="related-video-title">{{ related_video.title }}</h3>
+                            {% if related_video.space_name %}
+                            <p class="related-video-space">{{ related_video.space_name }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
 
