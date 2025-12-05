@@ -1904,6 +1904,7 @@ def stream_video(video_id):
             'type': 'youtube',
             'supports_adaptive': True,  # YouTube handles adaptive streaming
             'youtube_id': youtube_id,
+            'youtube_embed_url': youtube_embed_url,  # Explicitly include for frontend
             'youtube_url': video.get('youtube_url', f'https://www.youtube.com/watch?v={youtube_id}')
         })
     
