@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>StayCurrentMD Video Library</title>
+    {% if base_path %}<base href="{{ base_path }}/">{% endif %}
+    <script>
+        // Base path for API calls
+        const API_BASE = '{{ base_path|default("") }}';
+    </script>
     <style>
         * {
             margin: 0;
@@ -480,6 +485,39 @@
             display: none;
         }
         /* Views are controlled by the 'hidden' class, not CSS rules */
+        .section-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            background: white;
+            padding: 10px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .tab-button {
+            flex: 1;
+            padding: 15px 30px;
+            border: 2px solid #e0e0e0;
+            background: white;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: #666;
+        }
+        .tab-button:hover {
+            border-color: #667eea;
+            color: #667eea;
+        }
+        .tab-button.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        #spaces-section, #playlists-section {
+            margin-top: 20px;
+        }
     </style>
 </head>
 <body>
@@ -589,13 +627,183 @@
         }
         
         // Load spaces
+        // Tab switching functions
+        function showSpacesTab() {
+            document.getElementById('spaces-tab').classList.add('active');
+            document.getElementById('playlists-tab').classList.remove('active');
+            document.getElementById('spaces-section').classList.remove('hidden');
+            document.getElementById('playlists-section').classList.add('hidden');
+        }
+        
+        function showPlaylistsTab() {
+            document.getElementById('playlists-tab').classList.add('active');
+            document.getElementById('spaces-tab').classList.remove('active');
+            document.getElementById('playlists-section').classList.remove('hidden');
+            document.getElementById('spaces-section').classList.add('hidden');
+            
+            // Load playlists if not already loaded
+            if (document.getElementById('playlists-grid').children.length === 0) {
+                loadPlaylists();
+            }
+        }
+        
+        // Load and display playlists
+        async function loadPlaylists() {
+            const loadingEl = document.getElementById('playlists-loading');
+            const gridEl = document.getElementById('playlists-grid');
+            
+            try {
+                loadingEl.style.display = 'block';
+                gridEl.innerHTML = '';
+                
+                const response = await fetch(`${API_BASE}/api/playlists`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                loadingEl.style.display = 'none';
+                
+                if (!data.playlists || data.playlists.length === 0) {
+                    gridEl.innerHTML = '<div style="text-align: center; padding: 40px; color: #666;">No playlists found.</div>';
+                    return;
+                }
+                
+                // Render playlist cards
+                data.playlists.forEach(playlist => {
+                    const card = createPlaylistCard(playlist);
+                    gridEl.appendChild(card);
+                });
+            } catch (error) {
+                console.error('Error loading playlists:', error);
+                loadingEl.textContent = 'Error loading playlists: ' + error.message;
+                loadingEl.style.color = '#c33';
+            }
+        }
+        
+        // Create playlist card
+        function createPlaylistCard(playlist) {
+            const card = document.createElement('div');
+            card.className = 'space-card';
+            
+            // Thumbnail
+            if (playlist.thumbnail) {
+                const thumbnail = document.createElement('img');
+                thumbnail.src = playlist.thumbnail;
+                thumbnail.alt = playlist.title;
+                thumbnail.style.cssText = 'width: 100%; height: 180px; object-fit: cover; border-radius: 8px; margin-bottom: 15px;';
+                thumbnail.onerror = function() {
+                    this.style.display = 'none';
+                };
+                card.appendChild(thumbnail);
+            }
+            
+            // Title
+            const title = document.createElement('div');
+            title.className = 'space-card-title';
+            title.textContent = playlist.title;
+            card.appendChild(title);
+            
+            // Video count
+            const count = document.createElement('div');
+            count.className = 'space-card-count';
+            count.textContent = `${playlist.video_count || 0} videos`;
+            card.appendChild(count);
+            
+            // Description (truncated)
+            if (playlist.description) {
+                const desc = document.createElement('div');
+                desc.style.cssText = 'color: #666; font-size: 14px; margin-top: 10px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;';
+                desc.textContent = stripHtml(playlist.description);
+                card.appendChild(desc);
+            }
+            
+            // Click handler - show playlist videos
+            card.onclick = () => showPlaylistVideos(playlist);
+            
+            return card;
+        }
+        
+        // Show videos in a playlist
+        async function showPlaylistVideos(playlist) {
+            currentSpace = null;
+            currentPlaylist = playlist;
+            
+            // Update view
+            document.getElementById('spaces-view').classList.add('hidden');
+            document.getElementById('videos-view').classList.remove('hidden');
+            document.getElementById('search-results-view').classList.add('hidden');
+            
+            // Update header
+            document.getElementById('current-space-title').textContent = playlist.title;
+            document.getElementById('current-space-count').textContent = `${playlist.video_count || 0} videos`;
+            
+            // Load videos
+            const loadingEl = document.getElementById('videos-loading');
+            const gridEl = document.getElementById('videos-grid');
+            
+            try {
+                loadingEl.style.display = 'block';
+                gridEl.innerHTML = '';
+                
+                const response = await fetch(`${API_BASE}/api/playlists/${playlist.playlist_id}/videos`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                loadingEl.style.display = 'none';
+                
+                if (!data.videos || data.videos.length === 0) {
+                    gridEl.innerHTML = '<div style="text-align: center; padding: 40px; color: #666;">No videos in this playlist.</div>';
+                    return;
+                }
+                
+                // Find matching videos from all_videos by YouTube ID
+                data.videos.forEach(playlistVideo => {
+                    // Try to find matching video in our library
+                    const matchingVideo = all_videos.find(v => 
+                        v.youtube_id === playlistVideo.video_id || 
+                        v.youtube_embed_url?.includes(playlistVideo.video_id)
+                    );
+                    
+                    if (matchingVideo) {
+                        const card = createVideoCard(matchingVideo);
+                        gridEl.appendChild(card);
+                    } else {
+                        // Create a card for YouTube-only video
+                        const video = {
+                            id: playlistVideo.video_id,
+                            title: playlistVideo.title,
+                            description: playlistVideo.description,
+                            thumbnail: playlistVideo.thumbnail,
+                            youtube_id: playlistVideo.video_id,
+                            youtube_embed_url: `https://www.youtube.com/embed/${playlistVideo.video_id}`,
+                            type: 'youtube',
+                            space_name: playlist.title
+                        };
+                        const card = createVideoCard(video);
+                        gridEl.appendChild(card);
+                    }
+                });
+                
+                // Hide pagination for playlists
+                document.getElementById('pagination').innerHTML = '';
+                
+            } catch (error) {
+                console.error('Error loading playlist videos:', error);
+                loadingEl.textContent = 'Error loading playlist videos: ' + error.message;
+                loadingEl.style.color = '#c33';
+            }
+        }
+        
         async function loadSpaces() {
             try {
                 document.getElementById('spaces-loading').textContent = 'Loading spaces...';
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
                 
-                const response = await fetch('/api/spaces', {
+                const response = await fetch(`${API_BASE}/api/spaces`, {
                     signal: controller.signal
                 });
                 
@@ -712,7 +920,7 @@
                 
                 const spaceNameEncoded = encodeURIComponent(currentSpace);
                 const searchParam = currentSearch ? `&search=${encodeURIComponent(currentSearch)}` : '';
-                const url = `/api/spaces/${spaceNameEncoded}/videos?page=${currentPage}&per_page=${VIDEOS_PER_PAGE}${searchParam}`;
+                const url = `${API_BASE}/api/spaces/${spaceNameEncoded}/videos?page=${currentPage}&per_page=${VIDEOS_PER_PAGE}${searchParam}`;
                 
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
@@ -890,10 +1098,24 @@
         }
         
         // Load search results across all videos
+        // Store current search controller to cancel previous requests
+        let currentSearchController = null;
+        let currentSearchTimeout = null;
+        
         async function loadSearchResults() {
             if (!currentSearch || !currentSearch.trim()) {
                 showSpaces();
                 return;
+            }
+            
+            // Cancel any previous search request
+            if (currentSearchController) {
+                currentSearchController.abort();
+                currentSearchController = null;
+            }
+            if (currentSearchTimeout) {
+                clearTimeout(currentSearchTimeout);
+                currentSearchTimeout = null;
             }
             
             try {
@@ -913,19 +1135,30 @@
                 document.getElementById('search-results-title').textContent = `Search: "${currentSearch}"`;
                 document.getElementById('search-loading').classList.remove('hidden');
                 document.getElementById('search-loading').textContent = 'Searching videos...';
+                document.getElementById('search-loading').style.color = '';
                 document.getElementById('search-results-grid').innerHTML = '';
                 
                 const searchParam = encodeURIComponent(currentSearch);
-                const url = `/api/search?page=${currentPage}&per_page=${VIDEOS_PER_PAGE}&search=${searchParam}`;
+                const url = `${API_BASE}/api/search?page=${currentPage}&per_page=${VIDEOS_PER_PAGE}&search=${searchParam}`;
                 
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 10000);
+                // Create new abort controller for this search
+                currentSearchController = new AbortController();
+                // Increase timeout to 30 seconds for complex searches (especially with transcription search)
+                currentSearchTimeout = setTimeout(() => {
+                    if (currentSearchController) {
+                        currentSearchController.abort();
+                    }
+                }, 30000); // 30 seconds
                 
                 const response = await fetch(url, {
-                    signal: controller.signal
+                    signal: currentSearchController.signal
                 });
                 
-                clearTimeout(timeoutId);
+                // Clear timeout on success
+                if (currentSearchTimeout) {
+                    clearTimeout(currentSearchTimeout);
+                    currentSearchTimeout = null;
+                }
                 
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
@@ -956,14 +1189,30 @@
                 renderSearchPagination(data.pagination);
                 document.getElementById('search-loading').classList.add('hidden');
                 console.log('Search results loaded and rendered');
+                
+                // Clear controller reference on success
+                currentSearchController = null;
             } catch (error) {
+                // Clear timeout on error
+                if (currentSearchTimeout) {
+                    clearTimeout(currentSearchTimeout);
+                    currentSearchTimeout = null;
+                }
+                
+                // Don't show error if request was aborted (user started new search)
+                if (error.name === 'AbortError') {
+                    console.log('Search request was cancelled (likely new search started)');
+                    return; // Silently return - new search will handle display
+                }
+                
                 console.error('Error loading search results:', error);
                 document.getElementById('search-loading').textContent = 
-                    error.name === 'AbortError' 
-                        ? 'Request timed out. Please try again.'
-                        : 'Error loading search results: ' + error.message;
+                    'Error loading search results. Please try again.';
                 document.getElementById('search-loading').style.color = '#c33';
-                showError('Failed to load search results: ' + error.message);
+                showError('Failed to load search results. Please try again.');
+                
+                // Clear controller reference on error
+                currentSearchController = null;
             }
         }
         
@@ -1074,7 +1323,7 @@
             // Get thumbnail URL - try multiple sources
             const thumbnailUrl = video.thumbnail || '';
             const hasThumbnail = thumbnailUrl && !thumbnailUrl.includes('default_thumbnail');
-            const thumbnailEndpoint = `/api/video/${video.id}/thumbnail`;
+            const thumbnailEndpoint = `${API_BASE}/api/video/${video.id}/thumbnail`;
             
             // Create thumbnail with smooth loading
             const thumbnailContainer = document.createElement('div');
@@ -1196,13 +1445,22 @@
             metaDiv.appendChild(idSpan);
             card.appendChild(metaDiv);
             
-            // Make card clickable
-            card.onclick = () => openVideoPlayer(video);
+            // Make card clickable - navigate to new video page
+            card.onclick = () => openVideoPage(video);
             
             return card;
         }
         
-        // Video player functions
+        // Navigate to video page with timestops/transcription
+        function openVideoPage(video) {
+            // Use the reliable video ID route - this always works
+            // The friendly URL route can be used for sharing, but ID route is more reliable for navigation
+            const videoUrl = `${API_BASE}/video/${video.id}`;
+            console.log('Navigating to video page:', videoUrl, 'for video:', video.title);
+            window.location.href = videoUrl;
+        }
+        
+        // Video player functions (kept for backward compatibility, but not used for new videos)
         let currentVideo = null;
         const videoPlayer = document.getElementById('video-player');
         const videoModal = document.getElementById('video-modal');
@@ -1227,16 +1485,21 @@
                 // Always use proxy endpoint to handle CORS for CloudFront/S3 URLs
                 // Fetch video URL from API
                 try {
-                    const response = await fetch(`/api/video/stream/${video.id}`);
+                    const response = await fetch(`${API_BASE}/api/video/stream/${video.id}`);
                     const data = await response.json();
                     
                     if (data.video_url) {
                         videoUrl = data.video_url;
                         console.log('Video URL from API:', videoUrl);
                         
+                        // If it's a relative path (starts with /), prepend API_BASE
+                        if (videoUrl.startsWith('/')) {
+                            videoUrl = `${API_BASE}${videoUrl}`;
+                            console.log('Prepending base path:', videoUrl);
+                        }
                         // If it's a CloudFront or S3 URL, use proxy instead to avoid CORS
-                        if (videoUrl.includes('cloudfront.net') || videoUrl.includes('amazonaws.com') || videoUrl.includes('s3.')) {
-                            videoUrl = `/api/video/proxy/${video.id}`;
+                        else if (videoUrl.includes('cloudfront.net') || videoUrl.includes('amazonaws.com') || videoUrl.includes('s3.')) {
+                            videoUrl = `${API_BASE}/api/video/proxy/${video.id}`;
                             console.log('Using proxy for CloudFront/S3 URL to avoid CORS');
                         }
                     } else if (data.error) {
@@ -1335,50 +1598,50 @@
                         // Only show error if video truly failed after delay
                         if (videoPlayer.error && !hasShownError) {
                             hasShownError = true;
-                            // Hide video player
-                            videoPlayer.style.display = 'none';
-                            
-                            // Show error message
-                            const errorMsg = document.createElement('div');
-                            errorMsg.id = 'video-error-message';
-                            errorMsg.style.cssText = 'color: white; padding: 30px; text-align: center; background: rgba(255,0,0,0.15); border-radius: 8px; margin: 20px; border: 1px solid rgba(255,107,107,0.3);';
-                            
-                            let errorDetails = 'The video could not be loaded.';
-                            if (videoPlayer.error) {
-                                const error = videoPlayer.error;
-                                if (error.code === error.MEDIA_ERR_SRC_NOT_SUPPORTED) {
-                                    errorDetails = 'Video format not supported or video file not found.';
-                                } else if (error.code === error.MEDIA_ERR_NETWORK) {
-                                    errorDetails = 'Network error while loading video.';
-                                } else if (error.code === error.MEDIA_ERR_DECODE) {
-                                    errorDetails = 'Video decoding error.';
-                                } else if (error.code === error.MEDIA_ERR_ABORTED) {
-                                    errorDetails = 'Video loading was aborted.';
-                                }
-                            }
-                            
-                            errorMsg.innerHTML = `
-                                <p style="color: #ff6b6b; margin-bottom: 20px; font-weight: bold; font-size: 18px;">⚠️ Video Unavailable</p>
-                                <p style="font-size: 14px; color: #ccc; margin-bottom: 20px;">${errorDetails}</p>
-                                <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 6px; margin: 15px 0; text-align: left; display: inline-block;">
-                                    <p style="font-size: 12px; color: #999; margin: 5px 0;"><strong>Common Causes:</strong></p>
-                                    <ul style="text-align: left; color: #ccc; font-size: 12px; margin: 10px 0; padding-left: 20px;">
-                                        <li>S3 path in metadata doesn't match actual S3 key</li>
-                                        <li>Video is private (requires AWS credentials)</li>
-                                        <li>Video file doesn't exist at specified path</li>
-                                        <li>AWS region misconfigured</li>
-                                    </ul>
-                                </div>
-                                <p style="margin-top: 20px; font-size: 11px; color: #666;">
-                                    <strong>To fix:</strong> Verify S3 key format or configure AWS credentials<br>
-                                    <code style="background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 3px; font-size: 10px; display: block; margin-top: 10px;">
-                                        export AWS_DEFAULT_REGION=us-east-2<br>
-                                        export AWS_ACCESS_KEY_ID=your-key<br>
-                                        export AWS_SECRET_ACCESS_KEY=your-secret
-                                    </code>
-                                </p>
-                            `;
-                            videoPlayer.parentNode.insertBefore(errorMsg, videoPlayer);
+                    // Hide video player
+                    videoPlayer.style.display = 'none';
+                    
+                    // Show error message
+                    const errorMsg = document.createElement('div');
+                    errorMsg.id = 'video-error-message';
+                    errorMsg.style.cssText = 'color: white; padding: 30px; text-align: center; background: rgba(255,0,0,0.15); border-radius: 8px; margin: 20px; border: 1px solid rgba(255,107,107,0.3);';
+                    
+                    let errorDetails = 'The video could not be loaded.';
+                    if (videoPlayer.error) {
+                        const error = videoPlayer.error;
+                        if (error.code === error.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+                            errorDetails = 'Video format not supported or video file not found.';
+                        } else if (error.code === error.MEDIA_ERR_NETWORK) {
+                            errorDetails = 'Network error while loading video.';
+                        } else if (error.code === error.MEDIA_ERR_DECODE) {
+                            errorDetails = 'Video decoding error.';
+                        } else if (error.code === error.MEDIA_ERR_ABORTED) {
+                            errorDetails = 'Video loading was aborted.';
+                        }
+                    }
+                    
+                    errorMsg.innerHTML = `
+                        <p style="color: #ff6b6b; margin-bottom: 20px; font-weight: bold; font-size: 18px;">⚠️ Video Unavailable</p>
+                        <p style="font-size: 14px; color: #ccc; margin-bottom: 20px;">${errorDetails}</p>
+                        <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 6px; margin: 15px 0; text-align: left; display: inline-block;">
+                            <p style="font-size: 12px; color: #999; margin: 5px 0;"><strong>Common Causes:</strong></p>
+                            <ul style="text-align: left; color: #ccc; font-size: 12px; margin: 10px 0; padding-left: 20px;">
+                                <li>S3 path in metadata doesn't match actual S3 key</li>
+                                <li>Video is private (requires AWS credentials)</li>
+                                <li>Video file doesn't exist at specified path</li>
+                                <li>AWS region misconfigured</li>
+                            </ul>
+                        </div>
+                        <p style="margin-top: 20px; font-size: 11px; color: #666;">
+                            <strong>To fix:</strong> Verify S3 key format or configure AWS credentials<br>
+                            <code style="background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 3px; font-size: 10px; display: block; margin-top: 10px;">
+                                export AWS_DEFAULT_REGION=us-east-2<br>
+                                export AWS_ACCESS_KEY_ID=your-key<br>
+                                export AWS_SECRET_ACCESS_KEY=your-secret
+                            </code>
+                        </p>
+                    `;
+                    videoPlayer.parentNode.insertBefore(errorMsg, videoPlayer);
                         }
                     };
                     
@@ -1437,29 +1700,29 @@
                         // Only show error for other types of errors and only if video truly can't play
                         setTimeout(() => {
                             if (videoPlayer.readyState < 2 && videoPlayer.paused && !hasShownError) {
-                                const errorMsg = document.createElement('div');
+                            const errorMsg = document.createElement('div');
                                 errorMsg.id = 'video-play-error-message';
-                                errorMsg.style.cssText = 'color: white; padding: 20px; text-align: center; background: rgba(255,0,0,0.2); border-radius: 8px; margin: 20px;';
-                                
-                                let errorDetails = 'Unknown error';
-                                if (e.name === 'NotSupportedError') {
-                                    errorDetails = 'Video format not supported or video failed to load. Check if video URL is accessible.';
-                                } else if (e.message && e.message.includes('CORS')) {
-                                    errorDetails = 'CORS error: Video server does not allow cross-origin requests.';
-                                } else {
-                                    errorDetails = e.message || 'Unable to play video';
-                                }
-                                
-                                errorMsg.innerHTML = `
-                                    <p style="color: #ff6b6b; margin-bottom: 15px; font-weight: bold;">Unable to play video</p>
-                                    <p style="font-size: 14px; color: #ccc; margin-bottom: 10px;">${errorDetails}</p>
-                                    <p style="margin-top: 15px; font-size: 12px; color: #999; word-break: break-all;">
-                                        Video URL: <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px;">${videoUrl}</code>
-                                    </p>
-                                `;
-                                videoPlayer.parentNode.insertBefore(errorMsg, videoPlayer);
-                                hasShownError = true;
+                            errorMsg.style.cssText = 'color: white; padding: 20px; text-align: center; background: rgba(255,0,0,0.2); border-radius: 8px; margin: 20px;';
+                            
+                            let errorDetails = 'Unknown error';
+                            if (e.name === 'NotSupportedError') {
+                                errorDetails = 'Video format not supported or video failed to load. Check if video URL is accessible.';
+                            } else if (e.message && e.message.includes('CORS')) {
+                                errorDetails = 'CORS error: Video server does not allow cross-origin requests.';
+                            } else {
+                                errorDetails = e.message || 'Unable to play video';
                             }
+                            
+                            errorMsg.innerHTML = `
+                                <p style="color: #ff6b6b; margin-bottom: 15px; font-weight: bold;">Unable to play video</p>
+                                <p style="font-size: 14px; color: #ccc; margin-bottom: 10px;">${errorDetails}</p>
+                                <p style="margin-top: 15px; font-size: 12px; color: #999; word-break: break-all;">
+                                    Video URL: <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px;">${videoUrl}</code>
+                                </p>
+                            `;
+                            videoPlayer.parentNode.insertBefore(errorMsg, videoPlayer);
+                                hasShownError = true;
+                        }
                         }, 3000);
                     });
                 }
@@ -1469,7 +1732,7 @@
                     const playError = document.getElementById('video-play-error-message');
                     if (playError) {
                         playError.remove();
-                    }
+                }
                 };
             } else {
                 loadingMsg.innerHTML = `

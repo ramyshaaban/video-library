@@ -107,6 +107,127 @@ def get_youtube_channel_id(api_key, channel_username=None):
         print(f"Error getting channel ID: {e}")
     return None
 
+def fetch_youtube_playlists(api_key, channel_id):
+    """Fetch all playlists from YouTube channel"""
+    playlists = []
+    
+    try:
+        print(f"📋 Fetching playlists from YouTube channel: {channel_id}")
+        url = 'https://www.googleapis.com/youtube/v3/playlists'
+        params = {
+            'part': 'snippet,contentDetails',
+            'channelId': channel_id,
+            'maxResults': 50,
+            'key': api_key
+        }
+        
+        next_page_token = None
+        page_count = 0
+        
+        while True:
+            if next_page_token:
+                params['pageToken'] = next_page_token
+            
+            page_count += 1
+            print(f"   Fetching playlists page {page_count}...")
+            
+            response = requests.get(url, params=params, timeout=30)
+            
+            if response.status_code != 200:
+                print(f"❌ YouTube API error: {response.status_code} - {response.text}")
+                break
+            
+            data = response.json()
+            items = data.get('items', [])
+            
+            if not items:
+                break
+            
+            print(f"   Found {len(items)} playlists on this page")
+            
+            for item in items:
+                snippet = item.get('snippet', {})
+                content_details = item.get('contentDetails', {})
+                
+                playlist = {
+                    'playlist_id': item['id'],
+                    'title': snippet.get('title', 'Untitled Playlist'),
+                    'description': snippet.get('description', ''),
+                    'thumbnail': snippet.get('thumbnails', {}).get('high', {}).get('url', ''),
+                    'video_count': content_details.get('itemCount', 0),
+                    'published_at': snippet.get('publishedAt', ''),
+                    'channel_id': snippet.get('channelId', ''),
+                    'channel_title': snippet.get('channelTitle', '')
+                }
+                playlists.append(playlist)
+            
+            next_page_token = data.get('nextPageToken')
+            if not next_page_token:
+                break
+        
+        print(f"✅ Fetched {len(playlists)} playlists from YouTube")
+        return playlists
+    except Exception as e:
+        print(f"❌ Error fetching playlists: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
+def fetch_playlist_videos(api_key, playlist_id):
+    """Fetch all videos in a YouTube playlist"""
+    videos = []
+    
+    try:
+        url = 'https://www.googleapis.com/youtube/v3/playlistItems'
+        params = {
+            'part': 'snippet,contentDetails',
+            'playlistId': playlist_id,
+            'maxResults': 50,
+            'key': api_key
+        }
+        
+        next_page_token = None
+        
+        while True:
+            if next_page_token:
+                params['pageToken'] = next_page_token
+            
+            response = requests.get(url, params=params, timeout=30)
+            
+            if response.status_code != 200:
+                print(f"❌ Error fetching playlist videos: {response.status_code}")
+                break
+            
+            data = response.json()
+            items = data.get('items', [])
+            
+            if not items:
+                break
+            
+            for item in items:
+                snippet = item.get('snippet', {})
+                video_id = snippet.get('resourceId', {}).get('videoId')
+                
+                if video_id:
+                    video = {
+                        'video_id': video_id,
+                        'title': snippet.get('title', 'Untitled'),
+                        'description': snippet.get('description', ''),
+                        'thumbnail': snippet.get('thumbnails', {}).get('high', {}).get('url', ''),
+                        'position': snippet.get('position', 0),
+                        'published_at': snippet.get('publishedAt', '')
+                    }
+                    videos.append(video)
+            
+            next_page_token = data.get('nextPageToken')
+            if not next_page_token:
+                break
+        
+        return videos
+    except Exception as e:
+        print(f"❌ Error fetching playlist videos: {e}")
+        return []
+
 def fetch_youtube_videos(api_key, channel_id=None, max_results=None):
     """Fetch videos from YouTube channel using API - fetches ALL videos if max_results is None"""
     videos = []
@@ -987,6 +1108,37 @@ def video_with_timestops_friendly(space_name, video_name):
                           related_videos=related_videos,
                           base_path=base_path,
                           is_https=is_https)
+
+@app.route('/api/playlists')
+def get_playlists():
+    """API endpoint to get all YouTube playlists"""
+    if not YOUTUBE_API_KEY or not YOUTUBE_CHANNEL_ID:
+        return jsonify({'error': 'YouTube API not configured'}), 400
+    
+    try:
+        playlists = fetch_youtube_playlists(YOUTUBE_API_KEY, YOUTUBE_CHANNEL_ID)
+        return jsonify({
+            'playlists': playlists,
+            'total': len(playlists)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/playlists/<playlist_id>/videos')
+def get_playlist_videos(playlist_id):
+    """API endpoint to get videos in a playlist"""
+    if not YOUTUBE_API_KEY:
+        return jsonify({'error': 'YouTube API not configured'}), 400
+    
+    try:
+        videos = fetch_playlist_videos(YOUTUBE_API_KEY, playlist_id)
+        return jsonify({
+            'playlist_id': playlist_id,
+            'videos': videos,
+            'total': len(videos)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/')
 def index():
