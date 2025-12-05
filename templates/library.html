@@ -1478,6 +1478,15 @@
         
         // Navigate to video page with timestops/transcription
         function openVideoPage(video) {
+            // Check if this is a YouTube-only video (not in library)
+            if (video.type === 'youtube' && video.id && video.id.startsWith('yt_')) {
+                // For YouTube-only videos, open YouTube directly
+                const youtubeUrl = video.youtube_url || `https://www.youtube.com/watch?v=${video.youtube_id}`;
+                console.log('Opening YouTube video:', youtubeUrl);
+                window.open(youtubeUrl, '_blank');
+                return;
+            }
+            
             // Use the reliable video ID route - this always works
             // The friendly URL route can be used for sharing, but ID route is more reliable for navigation
             const videoUrl = `${API_BASE}/video/${video.id}`;
