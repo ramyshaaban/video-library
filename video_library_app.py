@@ -924,6 +924,37 @@ except Exception as e:
 
 # Add friendly URL route BEFORE the index route to ensure it's matched first
 # This route must come before other routes that might catch it
+@app.route('/api/playlists')
+def get_playlists():
+    """API endpoint to get all YouTube playlists"""
+    if not YOUTUBE_API_KEY or not YOUTUBE_CHANNEL_ID:
+        return jsonify({'error': 'YouTube API not configured'}), 400
+    
+    try:
+        playlists = fetch_youtube_playlists(YOUTUBE_API_KEY, YOUTUBE_CHANNEL_ID)
+        return jsonify({
+            'playlists': playlists,
+            'total': len(playlists)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/playlists/<playlist_id>/videos')
+def get_playlist_videos(playlist_id):
+    """API endpoint to get videos in a playlist"""
+    if not YOUTUBE_API_KEY:
+        return jsonify({'error': 'YouTube API not configured'}), 400
+    
+    try:
+        videos = fetch_playlist_videos(YOUTUBE_API_KEY, playlist_id)
+        return jsonify({
+            'playlist_id': playlist_id,
+            'videos': videos,
+            'total': len(videos)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/videolibrary/<space_name>/<video_name>')
 @app.route('/<space_name>/<video_name>')  # Also support without /videolibrary prefix
 def video_with_timestops_friendly(space_name, video_name):
@@ -1108,37 +1139,6 @@ def video_with_timestops_friendly(space_name, video_name):
                           related_videos=related_videos,
                           base_path=base_path,
                           is_https=is_https)
-
-@app.route('/api/playlists')
-def get_playlists():
-    """API endpoint to get all YouTube playlists"""
-    if not YOUTUBE_API_KEY or not YOUTUBE_CHANNEL_ID:
-        return jsonify({'error': 'YouTube API not configured'}), 400
-    
-    try:
-        playlists = fetch_youtube_playlists(YOUTUBE_API_KEY, YOUTUBE_CHANNEL_ID)
-        return jsonify({
-            'playlists': playlists,
-            'total': len(playlists)
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/playlists/<playlist_id>/videos')
-def get_playlist_videos(playlist_id):
-    """API endpoint to get videos in a playlist"""
-    if not YOUTUBE_API_KEY:
-        return jsonify({'error': 'YouTube API not configured'}), 400
-    
-    try:
-        videos = fetch_playlist_videos(YOUTUBE_API_KEY, playlist_id)
-        return jsonify({
-            'playlist_id': playlist_id,
-            'videos': videos,
-            'total': len(videos)
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/')
 def index():
