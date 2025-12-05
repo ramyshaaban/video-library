@@ -1553,10 +1553,30 @@
         
         // Seek to specific time
         function seekToTime(timestamp) {
-            if (video) {
-                video.currentTime = timestamp;
-                video.play();
+            if (!video) {
+                console.warn('Video not ready yet');
+                return;
             }
+            
+            // Ensure video is ready before seeking
+            const doSeek = () => {
+                if (video.readyState >= 2) { // HAVE_CURRENT_DATA or higher
+                    video.currentTime = Math.max(0, Math.min(timestamp, video.duration || timestamp));
+                    // Play the video
+                    const playPromise = video.play();
+                    if (playPromise !== undefined) {
+                        playPromise.catch(error => {
+                            console.log('Auto-play prevented:', error);
+                            // User interaction may be required for autoplay
+                        });
+                    }
+                } else {
+                    // Wait for video to be ready
+                    video.addEventListener('loadeddata', doSeek, { once: true });
+                }
+            };
+            
+            doSeek();
             
             // Highlight active timestop
             document.querySelectorAll('.timestop-item').forEach(item => {
@@ -1726,7 +1746,7 @@
                 html += '<div class="search-results-section">';
                 html += '<div class="search-results-header">📝 Transcript Results</div>';
                 html += transcriptResults.map(result => `
-                    <div class="search-result-item" onclick="jumpToResult(${result.timestamp}, '${result.type}')">
+                    <div class="search-result-item" onclick="jumpToResult(${result.timestamp}, '${result.type}', ${result.matchIndex || 0})">
                         <span class="search-result-time">${result.time}</span>
                         <span class="search-result-text">${highlightText(result.text, query)}</span>
                     </div>
@@ -1753,9 +1773,84 @@
             resultsContainer.innerHTML = html;
         }
 
-        // Jump to search result
-        function jumpToResult(timestamp, type) {
-            seekToTime(timestamp);
+        // Find the start of the sentence containing the match position
+        function findSentenceStart(matchIndex) {
+            if (!transcription || matchIndex < 0) {
+                return matchIndex;
+            }
+            
+            // Look backwards for sentence-ending punctuation (. ! ?) followed by space, newline, or end of text
+            // Also handle cases where punctuation is followed by quotes or parentheses
+            const sentenceEnders = /[.!?][\s\n"')]*/g;
+            let lastSentenceEnd = -1;
+            let match;
+            
+            // Reset regex lastIndex to start from beginning
+            sentenceEnders.lastIndex = 0;
+            
+            while ((match = sentenceEnders.exec(transcription)) !== null) {
+                const endPos = match.index + match[0].length;
+                if (endPos < matchIndex) {
+                    lastSentenceEnd = endPos;
+                } else {
+                    break;
+                }
+            }
+            
+            // If we found a sentence end before the match, start from there
+            if (lastSentenceEnd >= 0) {
+                // Skip any leading whitespace
+                while (lastSentenceEnd < transcription.length && 
+                       /\s/.test(transcription[lastSentenceEnd])) {
+                    lastSentenceEnd++;
+                }
+                return lastSentenceEnd;
+            }
+            
+            // Fallback: look for paragraph breaks (double newlines)
+            const beforeMatch = transcription.substring(0, matchIndex);
+            const lastParagraphBreak = beforeMatch.lastIndexOf('\n\n');
+            if (lastParagraphBreak >= 0) {
+                return lastParagraphBreak + 2; // Skip the two newlines
+            }
+            
+            // Fallback: go back up to 150 characters or to the start of the text
+            const fallbackStart = Math.max(0, matchIndex - 150);
+            
+            // Try to find a word boundary (space or punctuation followed by space)
+            const spaceMatch = beforeMatch.lastIndexOf(' ');
+            const punctuationMatch = beforeMatch.search(/[.!?]\s+[A-Z]/);
+            
+            if (punctuationMatch > fallbackStart) {
+                // Find the position after the punctuation and space
+                const afterPunct = beforeMatch.indexOf(' ', punctuationMatch);
+                return afterPunct > 0 ? afterPunct + 1 : punctuationMatch + 2;
+            }
+            
+            if (spaceMatch > fallbackStart) {
+                return spaceMatch + 1;
+            }
+            
+            return fallbackStart;
+        }
+
+        // Jump to search result - seeks to sentence start minus a few seconds
+        function jumpToResult(timestamp, type, matchIndex = null) {
+            let seekTime = timestamp;
+            
+            // For transcript results, find sentence start and go back a few seconds
+            if (type === 'transcription' && matchIndex !== null && transcription) {
+                const sentenceStartIndex = findSentenceStart(matchIndex);
+                const sentenceStartTime = getTimestampForTextPosition(sentenceStartIndex);
+                
+                // Go back 2-3 seconds before sentence start, but not before video start
+                seekTime = Math.max(0, sentenceStartTime - 2.5);
+            } else if (type === 'timestop') {
+                // For timestops, go back 2 seconds
+                seekTime = Math.max(0, timestamp - 2);
+            }
+            
+            seekToTime(seekTime);
             
             if (type === 'timestop') {
                 switchTab('timestops');
