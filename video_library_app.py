@@ -959,6 +959,10 @@ def get_playlist_videos(playlist_id):
 @app.route('/<space_name>/<video_name>')  # Also support without /videolibrary prefix
 def video_with_timestops_friendly(space_name, video_name):
     """Video page with friendly URL: /videolibrary/<space_name>/<video_name>"""
+    # Skip if this is an API route
+    if request.path.startswith('/api/'):
+        return jsonify({'error': 'Not found'}), 404
+    
     base_path = request.headers.get('X-Forwarded-Prefix', '')
     
     # Debug: Log the request
