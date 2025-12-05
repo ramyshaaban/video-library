@@ -4,7 +4,7 @@ StayCurrentMD Video Library - Flask Web Application
 A robust video library application with proper structure
 Enhanced with Elasticsearch for intelligent fuzzy search
 """
-from flask import Flask, render_template, jsonify, request, send_file, Response
+from flask import Flask, render_template, jsonify, request, send_file, Response, abort
 import json
 from collections import defaultdict
 from datetime import datetime
@@ -922,8 +922,7 @@ except Exception as e:
     all_videos = []
     spaces_dict = {}
 
-# Add friendly URL route BEFORE the index route to ensure it's matched first
-# This route must come before other routes that might catch it
+# API routes must come BEFORE catch-all routes
 @app.route('/api/playlists')
 def get_playlists():
     """API endpoint to get all YouTube playlists"""
@@ -955,11 +954,12 @@ def get_playlist_videos(playlist_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# Add friendly URL route - must come AFTER API routes
 @app.route('/videolibrary/<space_name>/<video_name>')
 @app.route('/<space_name>/<video_name>')  # Also support without /videolibrary prefix
 def video_with_timestops_friendly(space_name, video_name):
     """Video page with friendly URL: /videolibrary/<space_name>/<video_name>"""
-    # Skip if this is an API route
+    # Skip if this is an API route (safety check)
     if request.path.startswith('/api/'):
         return jsonify({'error': 'Not found'}), 404
     
