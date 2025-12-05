@@ -1561,15 +1561,29 @@
             // Ensure video is ready before seeking
             const doSeek = () => {
                 if (video.readyState >= 2) { // HAVE_CURRENT_DATA or higher
-                    video.currentTime = Math.max(0, Math.min(timestamp, video.duration || timestamp));
-                    // Play the video
-                    const playPromise = video.play();
-                    if (playPromise !== undefined) {
-                        playPromise.catch(error => {
-                            console.log('Auto-play prevented:', error);
-                            // User interaction may be required for autoplay
-                        });
-                    }
+                    const targetTime = Math.max(0, Math.min(timestamp, video.duration || timestamp));
+                    console.log(`🎯 Seeking to: ${targetTime.toFixed(2)}s (requested: ${timestamp.toFixed(2)}s)`);
+                    
+                    // Pause first to ensure clean seek
+                    video.pause();
+                    
+                    // Set the time
+                    video.currentTime = targetTime;
+                    
+                    // Wait a moment for seek to complete, then play
+                    setTimeout(() => {
+                        const actualTime = video.currentTime;
+                        console.log(`✅ Video seeked to: ${actualTime.toFixed(2)}s`);
+                        
+                        // Play the video
+                        const playPromise = video.play();
+                        if (playPromise !== undefined) {
+                            playPromise.catch(error => {
+                                console.log('Auto-play prevented:', error);
+                                // User interaction may be required for autoplay
+                            });
+                        }
+                    }, 100);
                 } else {
                     // Wait for video to be ready
                     video.addEventListener('loadeddata', doSeek, { once: true });
@@ -1711,7 +1725,7 @@
                     const matchIndex = match.index;
                     const matchLength = match[0].length;
                     
-                    // Get actual timestamp for this position
+                    // Get actual timestamp for the START of the match (not the end)
                     const timestamp = getTimestampForTextPosition(matchIndex);
                     
                     // Get context snippet (before and after match)
@@ -1836,15 +1850,19 @@
 
         // Jump to search result - seeks 5 seconds before the searched term
         function jumpToResult(timestamp, type, matchIndex = null) {
+            console.log(`🔍 Jump to result - Type: ${type}, Timestamp: ${timestamp}, MatchIndex: ${matchIndex}`);
+            
             let seekTime = timestamp;
             
-            // For transcript results, go back 5 seconds before the match
+            // For transcript results, go back 5 seconds before the match START
             if (type === 'transcription') {
                 // Go back 5 seconds before the match timestamp, but not before video start
                 seekTime = Math.max(0, timestamp - 5);
+                console.log(`📝 Transcript match - Original: ${timestamp.toFixed(2)}s, Seeking to: ${seekTime.toFixed(2)}s`);
             } else if (type === 'timestop') {
                 // For timestops, go back 5 seconds as well
                 seekTime = Math.max(0, timestamp - 5);
+                console.log(`⏱️ Timestop match - Original: ${timestamp.toFixed(2)}s, Seeking to: ${seekTime.toFixed(2)}s`);
             }
             
             seekToTime(seekTime);
