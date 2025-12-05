@@ -77,11 +77,174 @@ if ELASTICSEARCH_ENABLED:
 else:
     print("ℹ️  Elasticsearch disabled, using basic search")
 
+# YouTube API Configuration
+YOUTUBE_API_KEY = 'AIzaSyA5-KATvhgQvETeGau2KZ2K1lvkMZQWg9A'
+YOUTUBE_CHANNEL_ID = None  # Will be set when fetching videos
+
+def get_youtube_channel_id(api_key, channel_username=None):
+    """Get channel ID from username or use default channel"""
+    if not channel_username:
+        # Try to get channel ID from API key's associated channel
+        # For now, we'll need the user to provide channel ID or username
+        return None
+    
+    try:
+        url = 'https://www.googleapis.com/youtube/v3/channels'
+        params = {
+            'part': 'id',
+            'forUsername': channel_username,
+            'key': api_key
+        }
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('items'):
+                return data['items'][0]['id']
+    except Exception as e:
+        print(f"Error getting channel ID: {e}")
+    return None
+
+def fetch_youtube_videos(api_key, channel_id=None, max_results=50):
+    """Fetch videos from YouTube channel using API"""
+    videos = []
+    
+    try:
+        # Use search API - if channel_id provided, filter by it
+        url = 'https://www.googleapis.com/youtube/v3/search'
+        params = {
+            'part': 'snippet',
+            'type': 'video',
+            'maxResults': min(max_results, 50),  # YouTube API limit is 50 per request
+            'order': 'date',
+            'key': api_key
+        }
+        
+        # If channel_id provided, filter by it
+        if channel_id:
+            params['channelId'] = channel_id
+        else:
+            # If no channel_id, we'll search for popular videos or need to get channel ID from username
+            # For now, search without channel filter (will get general results)
+            # User should set YOUTUBE_CHANNEL_ID environment variable
+            print("⚠️  No channel_id provided. Set YOUTUBE_CHANNEL_ID environment variable or videos will be from general search.")
+        
+        # Fetch videos
+        next_page_token = None
+        total_fetched = 0
+        
+        while total_fetched < max_results:
+            if next_page_token:
+                params['pageToken'] = next_page_token
+            
+            response = requests.get(url, params=params, timeout=10)
+            
+            if response.status_code != 200:
+                print(f"❌ YouTube API error: {response.status_code} - {response.text}")
+                break
+            
+            data = response.json()
+            
+            # Get video details (duration, etc.) for each video
+            video_ids = [item['id']['videoId'] for item in data.get('items', [])]
+            
+            if video_ids:
+                # Fetch detailed video information
+                details_url = 'https://www.googleapis.com/youtube/v3/videos'
+                details_params = {
+                    'part': 'snippet,contentDetails,statistics',
+                    'id': ','.join(video_ids),
+                    'key': api_key
+                }
+                
+                details_response = requests.get(details_url, params=details_params, timeout=10)
+                if details_response.status_code == 200:
+                    details_data = details_response.json()
+                    
+                    # Map YouTube videos to our video structure
+                    for idx, item in enumerate(data.get('items', [])):
+                        video_id = item['id']['videoId']
+                        snippet = item.get('snippet', {})
+                        
+                        # Find corresponding details
+                        video_details = None
+                        for detail in details_data.get('items', []):
+                            if detail['id'] == video_id:
+                                video_details = detail
+                                break
+                        
+                        if video_details:
+                            content_details = video_details.get('contentDetails', {})
+                            duration_iso = content_details.get('duration', 'PT0S')
+                            
+                            # Convert ISO 8601 duration to seconds
+                            import re
+                            duration_match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', duration_iso)
+                            duration_seconds = 0
+                            if duration_match:
+                                hours = int(duration_match.group(1) or 0)
+                                minutes = int(duration_match.group(2) or 0)
+                                seconds = int(duration_match.group(3) or 0)
+                                duration_seconds = hours * 3600 + minutes * 60 + seconds
+                            
+                            # Create video object matching our structure
+                            # Generate a numeric content_id from YouTube video ID hash
+                            content_id = abs(hash(video_id)) % 1000000  # Use hash to get numeric ID
+                            video = {
+                                'content_id': content_id,
+                                'youtube_id': video_id,
+                                'title': snippet.get('title', 'Untitled'),
+                                'description': snippet.get('description', ''),
+                                'file_path': f'youtube:{video_id}',  # Special marker for YouTube videos
+                                'hls_url': None,  # YouTube doesn't use HLS directly
+                                'youtube_url': f'https://www.youtube.com/watch?v={video_id}',
+                                'youtube_embed_url': f'https://www.youtube.com/embed/{video_id}',
+                                'thumbnail': snippet.get('thumbnails', {}).get('high', {}).get('url', ''),
+                                'space_name': snippet.get('channelTitle', 'YouTube Channel'),
+                                'duration': duration_seconds,
+                                'published_at': snippet.get('publishedAt', ''),
+                                'view_count': int(video_details.get('statistics', {}).get('viewCount', 0)),
+                                'like_count': int(video_details.get('statistics', {}).get('likeCount', 0)),
+                                'hash_filename': None,
+                                'supports_adaptive': False,
+                                'type': 'youtube'
+                            }
+                            videos.append(video)
+                            total_fetched += 1
+            
+            # Check for next page
+            next_page_token = data.get('nextPageToken')
+            if not next_page_token or total_fetched >= max_results:
+                break
+        
+        print(f"✅ Fetched {len(videos)} videos from YouTube")
+        return videos
+        
+    except Exception as e:
+        print(f"❌ Error fetching YouTube videos: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
 # Load video data
 def load_video_data():
-    """Load video metadata from database"""
-    with open('all_video_metadata_from_database.json', 'r') as f:
-        return json.load(f)
+    """Load video metadata from YouTube API"""
+    # Fetch videos from YouTube
+    channel_id = os.getenv('YOUTUBE_CHANNEL_ID')
+    max_results = int(os.getenv('YOUTUBE_MAX_RESULTS', '100'))
+    
+    videos = fetch_youtube_videos(YOUTUBE_API_KEY, channel_id, max_results)
+    
+    if not videos:
+        print("⚠️  No videos fetched from YouTube, trying fallback...")
+        # Fallback to JSON file if YouTube fails
+        try:
+            with open('all_video_metadata_from_database.json', 'r') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            print("⚠️  Fallback JSON file not found")
+            return []
+    
+    return videos
 
 def categorize_by_space(videos):
     """Group videos by space name"""
@@ -1707,7 +1870,7 @@ def generate_cloudfront_signed_url(url_path, expiration=3600):
 
 @app.route('/api/video/stream/<int:video_id>')
 def stream_video(video_id):
-    """Stream video through proxy to avoid CORS issues - Optimized for fast response"""
+    """Get video stream URL - supports both YouTube and AWS videos"""
     # Find video (cached in memory, very fast)
     video = None
     for v in all_videos:
@@ -1717,6 +1880,19 @@ def stream_video(video_id):
     
     if not video:
         return jsonify({'error': 'Video not found'}), 404
+    
+    # Check if this is a YouTube video
+    if video.get('type') == 'youtube' or video.get('file_path', '').startswith('youtube:'):
+        youtube_id = video.get('youtube_id') or video.get('file_path', '').replace('youtube:', '')
+        youtube_embed_url = video.get('youtube_embed_url') or f'https://www.youtube.com/embed/{youtube_id}'
+        
+        return jsonify({
+            'video_url': youtube_embed_url,
+            'type': 'youtube',
+            'supports_adaptive': True,  # YouTube handles adaptive streaming
+            'youtube_id': youtube_id,
+            'youtube_url': video.get('youtube_url', f'https://www.youtube.com/watch?v={youtube_id}')
+        })
     
     # Get video URL - prefer HLS for adaptive streaming
     file_path = video.get('file_path', '')
@@ -1749,7 +1925,7 @@ def stream_video(video_id):
 
 @app.route('/api/video/proxy/<int:video_id>', methods=['GET', 'HEAD', 'OPTIONS'])
 def proxy_video(video_id):
-    """Proxy video from S3/CDN to avoid CORS issues"""
+    """Proxy video from S3/CDN to avoid CORS issues - YouTube videos redirect to embed"""
     # Find video
     video = None
     for v in all_videos:
@@ -1759,6 +1935,13 @@ def proxy_video(video_id):
     
     if not video:
         return jsonify({'error': 'Video not found'}), 404
+    
+    # Check if this is a YouTube video - redirect to YouTube embed
+    if video.get('type') == 'youtube' or video.get('file_path', '').startswith('youtube:'):
+        youtube_id = video.get('youtube_id') or video.get('file_path', '').replace('youtube:', '')
+        youtube_embed_url = f'https://www.youtube.com/embed/{youtube_id}'
+        from flask import redirect
+        return redirect(youtube_embed_url, code=302)
     
     file_path = video.get('file_path', '')
     hls_url = video.get('hls_url', '')
