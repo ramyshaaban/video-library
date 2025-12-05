@@ -546,8 +546,20 @@
         </header>
         
         <div id="spaces-view">
-            <div class="loading" id="spaces-loading">Loading spaces...</div>
-            <div class="spaces-grid" id="spaces-grid"></div>
+            <div class="section-tabs">
+                <button class="tab-button active" id="spaces-tab" onclick="showSpacesTab()">Spaces</button>
+                <button class="tab-button" id="playlists-tab" onclick="showPlaylistsTab()">Playlists</button>
+            </div>
+            
+            <div id="spaces-section">
+                <div class="loading" id="spaces-loading">Loading spaces...</div>
+                <div class="spaces-grid" id="spaces-grid"></div>
+            </div>
+            
+            <div id="playlists-section" class="hidden">
+                <div class="loading" id="playlists-loading">Loading playlists...</div>
+                <div class="spaces-grid" id="playlists-grid"></div>
+            </div>
         </div>
         
         <div id="videos-view" class="hidden">
