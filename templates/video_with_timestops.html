@@ -61,6 +61,7 @@
             flex-direction: column;
             min-height: 0;
             overflow: hidden;
+            gap: 20px;
         }
         .right-panel {
             display: flex;
@@ -369,8 +370,8 @@
             background: #2a2a2a;
             border-radius: 10px;
             padding: 20px;
-            margin-bottom: 20px;
             flex-shrink: 0;
+            overflow: hidden;
         }
         .related-videos-title {
             font-size: 20px;
@@ -379,9 +380,27 @@
             font-weight: 600;
         }
         .related-videos-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            display: flex;
             gap: 15px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding-bottom: 10px;
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+        }
+        .related-videos-grid::-webkit-scrollbar {
+            height: 8px;
+        }
+        .related-videos-grid::-webkit-scrollbar-track {
+            background: #1a1a1a;
+            border-radius: 4px;
+        }
+        .related-videos-grid::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 4px;
+        }
+        .related-videos-grid::-webkit-scrollbar-thumb:hover {
+            background: #5568d3;
         }
         .related-video-card {
             background: #1a1a1a;
@@ -390,6 +409,8 @@
             cursor: pointer;
             transition: all 0.3s;
             border: 2px solid transparent;
+            flex: 0 0 200px;
+            min-width: 200px;
         }
         .related-video-card:hover {
             transform: translateY(-5px);
@@ -471,9 +492,28 @@
                 height: auto;
                 max-height: none;
             }
+            .left-panel {
+                order: 1;
+            }
+            .right-panel {
+                order: 2;
+            }
+            .related-videos-section {
+                order: 3;
+            }
             .video-container {
                 height: 50vh;
                 max-height: 50vh;
+            }
+            .related-videos-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+                overflow-x: visible;
+                overflow-y: visible;
+            }
+            .related-video-card {
+                flex: none;
+                min-width: auto;
             }
             .timestops-container,
             .transcription-container {
@@ -492,9 +532,29 @@
                 height: auto;
                 max-height: none;
             }
+            .left-panel {
+                order: 1;
+                gap: 15px;
+            }
+            .right-panel {
+                order: 2;
+            }
+            .related-videos-section {
+                order: 3;
+            }
             .video-container {
                 height: 40vh;
                 max-height: 40vh;
+            }
+            .related-videos-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+                overflow-x: visible;
+                overflow-y: visible;
+            }
+            .related-video-card {
+                flex: none;
+                min-width: auto;
             }
         }
     </style>
@@ -507,7 +567,7 @@
         </div>
 
         <div class="main-layout">
-            <!-- Left Panel: Video -->
+            <!-- Left Panel: Video and Related Videos -->
             <div class="left-panel">
                 <div class="video-container">
                     <div class="video-loading" id="video-loading">
@@ -524,11 +584,8 @@
                         Your browser does not support the video tag.
                     </video>
                 </div>
-            </div>
-
-            <!-- Right Panel: Search, Timestops, Transcription -->
-            <div class="right-panel">
-                <!-- Related Videos Section -->
+                
+                <!-- Related Videos Section - Horizontal Carousel -->
                 {% if related_videos and related_videos|length > 0 %}
                 <div class="related-videos-section">
                     <h2 class="related-videos-title">Related Videos</h2>
@@ -557,6 +614,10 @@
                     </div>
                 </div>
                 {% endif %}
+            </div>
+
+            <!-- Right Panel: Search, Timestops, Transcription -->
+            <div class="right-panel">
                 <div class="search-container">
                     <div class="search-box">
                         <input type="text" id="search-input" class="search-input" placeholder="Search transcription and timestops...">
