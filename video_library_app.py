@@ -1945,11 +1945,19 @@ def generate_cloudfront_signed_url(url_path, expiration=3600):
 def stream_video(video_id):
     """Get video stream URL - supports both YouTube and AWS videos"""
     # Find video (cached in memory, very fast)
+    # Try by content_id first, then by YouTube ID as fallback
     video = None
     for v in all_videos:
         if v.get('content_id') == video_id:
             video = v
             break
+    
+    # If not found by content_id, try finding by YouTube ID (for YouTube videos)
+    if not video:
+        for v in all_videos:
+            if v.get('youtube_id') == str(video_id) or v.get('youtube_id') == video_id:
+                video = v
+                break
     
     if not video:
         return jsonify({'error': 'Video not found'}), 404
