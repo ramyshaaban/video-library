@@ -233,6 +233,17 @@ def load_video_data():
     channel_id = os.getenv('YOUTUBE_CHANNEL_ID')
     max_results = int(os.getenv('YOUTUBE_MAX_RESULTS', '100'))
     
+    if not YOUTUBE_API_KEY:
+        print("⚠️  YOUTUBE_API_KEY not set. Set environment variable YOUTUBE_API_KEY to use YouTube integration.")
+        print("   Falling back to JSON file...")
+        # Fallback to JSON file
+        try:
+            with open('all_video_metadata_from_database.json', 'r') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            print("⚠️  Fallback JSON file not found")
+            return []
+    
     videos = fetch_youtube_videos(YOUTUBE_API_KEY, channel_id, max_results)
     
     if not videos:
