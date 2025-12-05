@@ -244,6 +244,21 @@ def fetch_youtube_videos(api_key, channel_id=None, max_results=None):
                             # Use a simple hash that's consistent across Python sessions
                             import hashlib
                             content_id = int(hashlib.md5(video_id.encode()).hexdigest()[:8], 16) % 1000000
+                            
+                            # Load space mapping if available
+                            space_name = snippet.get('channelTitle', 'StayCurrentMD')
+                            try:
+                                import os
+                                mapping_file = 'youtube_to_space_mapping.json'
+                                if os.path.exists(mapping_file):
+                                    with open(mapping_file, 'r', encoding='utf-8') as f:
+                                        space_mapping = json.load(f)
+                                        if video_id in space_mapping:
+                                            space_name = space_mapping[video_id]
+                            except Exception as e:
+                                # If mapping file doesn't exist or has errors, use default
+                                pass
+                            
                             video = {
                                 'content_id': content_id,
                                 'youtube_id': video_id,
@@ -254,7 +269,7 @@ def fetch_youtube_videos(api_key, channel_id=None, max_results=None):
                                 'youtube_url': f'https://www.youtube.com/watch?v={video_id}',
                                 'youtube_embed_url': f'https://www.youtube.com/embed/{video_id}',
                                 'thumbnail': snippet.get('thumbnails', {}).get('high', {}).get('url', ''),
-                                'space_name': snippet.get('channelTitle', 'YouTube Channel'),
+                                'space_name': space_name,
                                 'duration': duration_seconds,
                                 'published_at': snippet.get('publishedAt', ''),
                                 'view_count': int(video_details.get('statistics', {}).get('viewCount', 0)),
