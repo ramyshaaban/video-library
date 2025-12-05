@@ -78,8 +78,9 @@ else:
     print("ℹ️  Elasticsearch disabled, using basic search")
 
 # YouTube API Configuration
-YOUTUBE_API_KEY = 'AIzaSyA5-KATvhgQvETeGau2KZ2K1lvkMZQWg9A'
-YOUTUBE_CHANNEL_ID = None  # Will be set when fetching videos
+# Get API key from environment variable for security
+YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
+YOUTUBE_CHANNEL_ID = os.getenv('YOUTUBE_CHANNEL_ID')  # Optional: Set to fetch from specific channel
 
 def get_youtube_channel_id(api_key, channel_username=None):
     """Get channel ID from username or use default channel"""
