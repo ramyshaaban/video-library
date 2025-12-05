@@ -1570,10 +1570,21 @@
                     // Set the time
                     video.currentTime = targetTime;
                     
-                    // Wait a moment for seek to complete, then play
-                    setTimeout(() => {
+                    // Wait for seek to actually complete using 'seeked' event
+                    const onSeeked = () => {
                         const actualTime = video.currentTime;
                         console.log(`✅ Video seeked to: ${actualTime.toFixed(2)}s`);
+                        
+                        // Verify we're at the right time (within 0.5 seconds)
+                        if (Math.abs(actualTime - targetTime) > 0.5) {
+                            console.warn(`⚠️ Seek mismatch! Target: ${targetTime.toFixed(2)}s, Actual: ${actualTime.toFixed(2)}s`);
+                            // Try seeking again
+                            video.currentTime = targetTime;
+                            return;
+                        }
+                        
+                        // Remove the event listener
+                        video.removeEventListener('seeked', onSeeked);
                         
                         // Play the video
                         const playPromise = video.play();
@@ -1583,7 +1594,23 @@
                                 // User interaction may be required for autoplay
                             });
                         }
-                    }, 100);
+                    };
+                    
+                    // Listen for seek completion
+                    video.addEventListener('seeked', onSeeked, { once: true });
+                    
+                    // Fallback timeout in case seeked event doesn't fire
+                    setTimeout(() => {
+                        video.removeEventListener('seeked', onSeeked);
+                        const actualTime = video.currentTime;
+                        console.log(`⏱️ Seek timeout - Video at: ${actualTime.toFixed(2)}s`);
+                        const playPromise = video.play();
+                        if (playPromise !== undefined) {
+                            playPromise.catch(error => {
+                                console.log('Auto-play prevented:', error);
+                            });
+                        }
+                    }, 500);
                 } else {
                     // Wait for video to be ready
                     video.addEventListener('loadeddata', doSeek, { once: true });
