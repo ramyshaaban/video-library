@@ -80,7 +80,9 @@ else:
 # YouTube API Configuration
 # Get API key from environment variable for security
 YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
-YOUTUBE_CHANNEL_ID = os.getenv('YOUTUBE_CHANNEL_ID')  # Optional: Set to fetch from specific channel
+# Default channel ID: UC7tyknq3hgjWGVLgLXqV1pA
+# Can be overridden with YOUTUBE_CHANNEL_ID environment variable
+YOUTUBE_CHANNEL_ID = os.getenv('YOUTUBE_CHANNEL_ID', 'UC7tyknq3hgjWGVLgLXqV1pA')
 
 def get_youtube_channel_id(api_key, channel_username=None):
     """Get channel ID from username or use default channel"""
