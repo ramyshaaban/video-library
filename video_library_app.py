@@ -112,23 +112,48 @@ def fetch_youtube_videos(api_key, channel_id=None, max_results=None):
     videos = []
     
     try:
-        # Use search API - if channel_id provided, filter by it
-        url = 'https://www.googleapis.com/youtube/v3/search'
-        params = {
-            'part': 'snippet',
-            'type': 'video',
-            'maxResults': 50,  # YouTube API limit is 50 per request
-            'order': 'date',
-            'key': api_key
-        }
-        
-        # If channel_id provided, filter by it
+        # First, get the uploads playlist ID from the channel
+        uploads_playlist_id = None
         if channel_id:
-            params['channelId'] = channel_id
             print(f"📺 Fetching videos from YouTube channel: {channel_id}")
+            # Get channel details to find uploads playlist
+            channel_url = 'https://www.googleapis.com/youtube/v3/channels'
+            channel_params = {
+                'part': 'contentDetails',
+                'id': channel_id,
+                'key': api_key
+            }
+            channel_response = requests.get(channel_url, params=channel_params, timeout=30)
+            if channel_response.status_code == 200:
+                channel_data = channel_response.json()
+                if channel_data.get('items'):
+                    uploads_playlist_id = channel_data['items'][0]['contentDetails']['relatedPlaylists']['uploads']
+                    print(f"   Found uploads playlist: {uploads_playlist_id}")
+        
+        # Use playlistItems API to get ALL videos from uploads playlist (more reliable than search)
+        if uploads_playlist_id:
+            url = 'https://www.googleapis.com/youtube/v3/playlistItems'
+            params = {
+                'part': 'snippet,contentDetails',
+                'playlistId': uploads_playlist_id,
+                'maxResults': 50,  # YouTube API limit is 50 per request
+                'key': api_key
+            }
+            print("   Using playlistItems API to fetch all videos...")
         else:
-            # If no channel_id, search without channel filter (will get general results)
-            print("⚠️  No channel_id provided. Videos will be from general search.")
+            # Fallback to search API if no channel_id
+            url = 'https://www.googleapis.com/youtube/v3/search'
+            params = {
+                'part': 'snippet',
+                'type': 'video',
+                'maxResults': 50,  # YouTube API limit is 50 per request
+                'order': 'date',
+                'key': api_key
+            }
+            if channel_id:
+                params['channelId'] = channel_id
+            else:
+                print("⚠️  No channel_id provided. Videos will be from general search.")
         
         # Fetch videos with pagination - continue until all videos are fetched
         next_page_token = None
@@ -153,8 +178,15 @@ def fetch_youtube_videos(api_key, channel_id=None, max_results=None):
             
             data = response.json()
             
-            # Get video details (duration, etc.) for each video
-            video_ids = [item['id']['videoId'] for item in data.get('items', [])]
+            # Get video IDs - different structure for playlistItems vs search
+            if uploads_playlist_id:
+                # playlistItems API structure
+                video_ids = [item['contentDetails']['videoId'] for item in data.get('items', []) if 'contentDetails' in item]
+                items_data = data.get('items', [])
+            else:
+                # search API structure
+                video_ids = [item['id']['videoId'] for item in data.get('items', [])]
+                items_data = data.get('items', [])
             
             if not video_ids:
                 print("   No more videos found.")
@@ -176,9 +208,15 @@ def fetch_youtube_videos(api_key, channel_id=None, max_results=None):
                     details_data = details_response.json()
                     
                     # Map YouTube videos to our video structure
-                    for idx, item in enumerate(data.get('items', [])):
-                        video_id = item['id']['videoId']
-                        snippet = item.get('snippet', {})
+                    for idx, item in enumerate(items_data):
+                        if uploads_playlist_id:
+                            # playlistItems structure
+                            video_id = item['contentDetails']['videoId']
+                            snippet = item.get('snippet', {})
+                        else:
+                            # search API structure
+                            video_id = item['id']['videoId']
+                            snippet = item.get('snippet', {})
                         
                         # Find corresponding details
                         video_details = None
