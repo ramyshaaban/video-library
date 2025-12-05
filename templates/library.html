@@ -785,32 +785,25 @@
                     return;
                 }
                 
-                // Find matching videos from all_videos by YouTube ID
+                // Create video cards from playlist videos
                 data.videos.forEach(playlistVideo => {
-                    // Try to find matching video in our library
-                    const matchingVideo = all_videos.find(v => 
-                        v.youtube_id === playlistVideo.video_id || 
-                        v.youtube_embed_url?.includes(playlistVideo.video_id)
-                    );
-                    
-                    if (matchingVideo) {
-                        const card = createVideoCard(matchingVideo);
-                        gridEl.appendChild(card);
-                    } else {
-                        // Create a card for YouTube-only video
-                        const video = {
-                            id: playlistVideo.video_id,
-                            title: playlistVideo.title,
-                            description: playlistVideo.description,
-                            thumbnail: playlistVideo.thumbnail,
-                            youtube_id: playlistVideo.video_id,
-                            youtube_embed_url: `https://www.youtube.com/embed/${playlistVideo.video_id}`,
-                            type: 'youtube',
-                            space_name: playlist.title
-                        };
-                        const card = createVideoCard(video);
-                        gridEl.appendChild(card);
-                    }
+                    // Try to find video in library by YouTube ID via API
+                    // For now, create a video object that works with the card system
+                    // We'll use a special format for YouTube-only videos
+                    const video = {
+                        id: `yt_${playlistVideo.video_id}`, // Special ID format for YouTube videos
+                        content_id: null, // No content_id for YouTube-only videos
+                        title: playlistVideo.title,
+                        description: playlistVideo.description || '',
+                        thumbnail: playlistVideo.thumbnail,
+                        youtube_id: playlistVideo.video_id,
+                        youtube_embed_url: `https://www.youtube.com/embed/${playlistVideo.video_id}`,
+                        youtube_url: `https://www.youtube.com/watch?v=${playlistVideo.video_id}`,
+                        type: 'youtube',
+                        space_name: playlist.title
+                    };
+                    const card = createVideoCard(video);
+                    gridEl.appendChild(card);
                 });
                 
                 // Hide pagination for playlists
@@ -1352,7 +1345,10 @@
             // Get thumbnail URL - try multiple sources
             const thumbnailUrl = video.thumbnail || '';
             const hasThumbnail = thumbnailUrl && !thumbnailUrl.includes('default_thumbnail');
-            const thumbnailEndpoint = `${API_BASE}/api/video/${video.id}/thumbnail`;
+            // For YouTube-only videos, use the thumbnail directly
+            const thumbnailEndpoint = (video.type === 'youtube' && video.id && video.id.startsWith('yt_')) 
+                ? thumbnailUrl 
+                : `${API_BASE}/api/video/${video.id}/thumbnail`;
             
             // Create thumbnail with smooth loading
             const thumbnailContainer = document.createElement('div');
