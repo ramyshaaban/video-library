@@ -125,11 +125,10 @@ def fetch_youtube_videos(api_key, channel_id=None, max_results=50):
         # If channel_id provided, filter by it
         if channel_id:
             params['channelId'] = channel_id
+            print(f"📺 Fetching videos from YouTube channel: {channel_id}")
         else:
-            # If no channel_id, we'll search for popular videos or need to get channel ID from username
-            # For now, search without channel filter (will get general results)
-            # User should set YOUTUBE_CHANNEL_ID environment variable
-            print("⚠️  No channel_id provided. Set YOUTUBE_CHANNEL_ID environment variable or videos will be from general search.")
+            # If no channel_id, search without channel filter (will get general results)
+            print("⚠️  No channel_id provided. Videos will be from general search.")
         
         # Fetch videos
         next_page_token = None
