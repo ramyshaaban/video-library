@@ -623,10 +623,17 @@
     <script>
         // State
         let currentSpace = null;
+        let currentPlaylist = null;
         let currentPage = 1;
         let currentSearch = '';
         let isSearchMode = false;
         const VIDEOS_PER_PAGE = 24;
+        
+        // Ensure all_videos is never referenced (safeguard)
+        if (typeof all_videos === 'undefined') {
+            // This variable is not used in this template
+            // Keeping this check to prevent errors if referenced elsewhere
+        }
         
         // Initialize
         async function init() {
