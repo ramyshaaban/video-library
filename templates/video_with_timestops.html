@@ -1407,9 +1407,60 @@
                 const data = await response.json();
                 console.log('API Response:', data);
                 
+                // Check if this is a YouTube video
+                if (data.type === 'youtube' && data.youtube_embed_url) {
+                    console.log('🎥 YouTube video detected, using embed iframe');
+                    
+                    // Hide loading
+                    if (loadingEl) {
+                        loadingEl.style.display = 'none';
+                        loadingEl.style.visibility = 'hidden';
+                        loadingEl.classList.add('hidden');
+                    }
+                    
+                    // Hide video element and create iframe for YouTube
+                    videoEl.style.display = 'none';
+                    
+                    // Check if iframe already exists
+                    let youtubeIframe = document.getElementById('youtube-player');
+                    if (!youtubeIframe) {
+                        // Create YouTube iframe
+                        youtubeIframe = document.createElement('iframe');
+                        youtubeIframe.id = 'youtube-player';
+                        youtubeIframe.src = data.youtube_embed_url + '?enablejsapi=1&origin=' + encodeURIComponent(window.location.origin);
+                        youtubeIframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+                        youtubeIframe.allowFullscreen = true;
+                        youtubeIframe.style.width = '100%';
+                        youtubeIframe.style.height = '100%';
+                        youtubeIframe.style.border = 'none';
+                        youtubeIframe.style.position = 'absolute';
+                        youtubeIframe.style.top = '0';
+                        youtubeIframe.style.left = '0';
+                        
+                        // Insert iframe into video container
+                        const videoContainer = videoEl.parentElement;
+                        if (videoContainer) {
+                            videoContainer.appendChild(youtubeIframe);
+                        }
+                    } else {
+                        // Update existing iframe src
+                        youtubeIframe.src = data.youtube_embed_url + '?enablejsapi=1&origin=' + encodeURIComponent(window.location.origin);
+                    }
+                    
+                    videoLoadInProgress = false;
+                    return;
+                }
+                
                 let videoUrl = data.video_url;
                 if (!videoUrl) {
                     throw new Error('No video_url in response');
+                }
+                
+                // Remove YouTube iframe if it exists (switching from YouTube to regular video)
+                const youtubeIframe = document.getElementById('youtube-player');
+                if (youtubeIframe) {
+                    youtubeIframe.remove();
+                    videoEl.style.display = 'block';
                 }
                 
                 const isHLS = data.type === 'hls' || data.is_hls || videoUrl.includes('.m3u8');
