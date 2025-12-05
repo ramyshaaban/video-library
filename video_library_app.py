@@ -107,8 +107,8 @@ def get_youtube_channel_id(api_key, channel_username=None):
         print(f"Error getting channel ID: {e}")
     return None
 
-def fetch_youtube_videos(api_key, channel_id=None, max_results=50):
-    """Fetch videos from YouTube channel using API"""
+def fetch_youtube_videos(api_key, channel_id=None, max_results=None):
+    """Fetch videos from YouTube channel using API - fetches ALL videos if max_results is None"""
     videos = []
     
     try:
@@ -117,7 +117,7 @@ def fetch_youtube_videos(api_key, channel_id=None, max_results=50):
         params = {
             'part': 'snippet',
             'type': 'video',
-            'maxResults': min(max_results, 50),  # YouTube API limit is 50 per request
+            'maxResults': 50,  # YouTube API limit is 50 per request
             'order': 'date',
             'key': api_key
         }
@@ -130,15 +130,22 @@ def fetch_youtube_videos(api_key, channel_id=None, max_results=50):
             # If no channel_id, search without channel filter (will get general results)
             print("⚠️  No channel_id provided. Videos will be from general search.")
         
-        # Fetch videos
+        # Fetch videos with pagination - continue until all videos are fetched
         next_page_token = None
         total_fetched = 0
+        page_count = 0
         
-        while total_fetched < max_results:
+        # If max_results is None, fetch ALL videos (no limit)
+        fetch_all = max_results is None
+        
+        while True:
             if next_page_token:
                 params['pageToken'] = next_page_token
             
-            response = requests.get(url, params=params, timeout=10)
+            page_count += 1
+            print(f"   Fetching page {page_count}...")
+            
+            response = requests.get(url, params=params, timeout=30)
             
             if response.status_code != 200:
                 print(f"❌ YouTube API error: {response.status_code} - {response.text}")
@@ -148,6 +155,12 @@ def fetch_youtube_videos(api_key, channel_id=None, max_results=50):
             
             # Get video details (duration, etc.) for each video
             video_ids = [item['id']['videoId'] for item in data.get('items', [])]
+            
+            if not video_ids:
+                print("   No more videos found.")
+                break
+            
+            print(f"   Found {len(video_ids)} videos on this page")
             
             if video_ids:
                 # Fetch detailed video information
@@ -212,10 +225,18 @@ def fetch_youtube_videos(api_key, channel_id=None, max_results=50):
                             }
                             videos.append(video)
                             total_fetched += 1
+                
+                print(f"   ✅ Processed {len(video_ids)} videos (total: {total_fetched})")
             
             # Check for next page
             next_page_token = data.get('nextPageToken')
-            if not next_page_token or total_fetched >= max_results:
+            if not next_page_token:
+                print("   ✅ No more pages available - fetched all videos from channel")
+                break
+            
+            # If max_results is set and we've reached it, stop
+            if not fetch_all and total_fetched >= max_results:
+                print(f"   Reached max_results limit ({max_results})")
                 break
         
         print(f"✅ Fetched {len(videos)} videos from YouTube")
@@ -230,9 +251,10 @@ def fetch_youtube_videos(api_key, channel_id=None, max_results=50):
 # Load video data
 def load_video_data():
     """Load video metadata from YouTube API"""
-    # Fetch videos from YouTube
+    # Fetch videos from YouTube - fetch ALL videos by default
     channel_id = os.getenv('YOUTUBE_CHANNEL_ID')
-    max_results = int(os.getenv('YOUTUBE_MAX_RESULTS', '100'))
+    max_results_env = os.getenv('YOUTUBE_MAX_RESULTS')
+    max_results = int(max_results_env) if max_results_env else None  # None = fetch all videos
     
     if not YOUTUBE_API_KEY:
         print("⚠️  YOUTUBE_API_KEY not set. Set environment variable YOUTUBE_API_KEY to use YouTube integration.")
