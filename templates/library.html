@@ -793,53 +793,18 @@
                 }
                 
                 // Create video cards from playlist videos
-                // First, try to find videos in library by YouTube ID
-                const videoLookupPromises = data.videos.map(async (playlistVideo) => {
-                    try {
-                        // Try to find video in library by searching for YouTube ID
-                        // We'll search all videos via the search API or try to find by YouTube ID
-                        const searchResponse = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(playlistVideo.video_id)}&limit=100`);
-                        if (searchResponse.ok) {
-                            const searchData = await searchResponse.json();
-                            // Look for exact YouTube ID match
-                            const matchingVideo = searchData.videos?.find(v => 
-                                v.youtube_id === playlistVideo.video_id || 
-                                v.youtube_embed_url?.includes(playlistVideo.video_id)
-                            );
-                            if (matchingVideo && matchingVideo.content_id) {
-                                return {
-                                    ...playlistVideo,
-                                    content_id: matchingVideo.content_id,
-                                    found_in_library: true
-                                };
-                            }
-                        }
-                    } catch (error) {
-                        console.log('Error looking up video:', error);
-                    }
-                    return {
-                        ...playlistVideo,
-                        content_id: null,
-                        found_in_library: false
-                    };
-                });
-                
-                const videosWithLookup = await Promise.all(videoLookupPromises);
-                
-                // Create video cards
-                videosWithLookup.forEach(playlistVideo => {
+                data.videos.forEach(playlistVideo => {
+                    // Create video object - we'll use YouTube ID route which will redirect to content_id if found
                     const video = {
-                        id: playlistVideo.found_in_library ? playlistVideo.content_id : `yt_${playlistVideo.video_id}`,
-                        content_id: playlistVideo.content_id,
+                        id: playlistVideo.video_id, // Use YouTube ID - backend route will handle lookup
+                        youtube_id: playlistVideo.video_id,
                         title: playlistVideo.title,
                         description: playlistVideo.description || '',
                         thumbnail: playlistVideo.thumbnail,
-                        youtube_id: playlistVideo.video_id,
                         youtube_embed_url: `https://www.youtube.com/embed/${playlistVideo.video_id}`,
                         youtube_url: `https://www.youtube.com/watch?v=${playlistVideo.video_id}`,
                         type: 'youtube',
-                        space_name: playlist.title,
-                        found_in_library: playlistVideo.found_in_library
+                        space_name: playlist.title
                     };
                     const card = createVideoCard(video);
                     gridEl.appendChild(card);
