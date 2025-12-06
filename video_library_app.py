@@ -30,6 +30,42 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
 
+# Analytics tracking file
+ANALYTICS_FILE = os.path.join(BASE_DIR, 'video_analytics.json')
+
+def load_analytics():
+    """Load video view analytics from file"""
+    if os.path.exists(ANALYTICS_FILE):
+        try:
+            with open(ANALYTICS_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_analytics(analytics):
+    """Save video view analytics to file"""
+    try:
+        with open(ANALYTICS_FILE, 'w') as f:
+            json.dump(analytics, f, indent=2)
+    except Exception as e:
+        print(f"Error saving analytics: {e}")
+
+def get_video_library_views(content_id):
+    """Get library view count for a video"""
+    analytics = load_analytics()
+    return analytics.get(str(content_id), {}).get('views', 0)
+
+def track_video_view(content_id):
+    """Track a video view"""
+    analytics = load_analytics()
+    video_id_str = str(content_id)
+    if video_id_str not in analytics:
+        analytics[video_id_str] = {'views': 0, 'last_viewed': None}
+    analytics[video_id_str]['views'] += 1
+    analytics[video_id_str]['last_viewed'] = datetime.now().isoformat()
+    save_analytics(analytics)
+
 app = Flask(__name__, template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR, static_url_path='/static')
 
 # Support for subpath deployment (e.g., /videolibrary)
@@ -204,20 +240,72 @@ def fetch_playlist_videos(api_key, playlist_id):
             if not items:
                 break
             
+            # Collect video IDs to fetch statistics
+            video_ids = []
+            video_items_map = {}
             for item in items:
                 snippet = item.get('snippet', {})
                 video_id = snippet.get('resourceId', {}).get('videoId')
-                
                 if video_id:
-                    video = {
-                        'video_id': video_id,
-                        'title': snippet.get('title', 'Untitled'),
-                        'description': snippet.get('description', ''),
-                        'thumbnail': snippet.get('thumbnails', {}).get('high', {}).get('url', ''),
-                        'position': snippet.get('position', 0),
-                        'published_at': snippet.get('publishedAt', '')
+                    video_ids.append(video_id)
+                    video_items_map[video_id] = item
+            
+            # Fetch detailed video statistics if we have video IDs
+            if video_ids:
+                details_url = 'https://www.googleapis.com/youtube/v3/videos'
+                # Fetch in batches of 50 (YouTube API limit)
+                for i in range(0, len(video_ids), 50):
+                    batch_ids = video_ids[i:i+50]
+                    details_params = {
+                        'part': 'snippet,statistics,contentDetails',
+                        'id': ','.join(batch_ids),
+                        'key': api_key
                     }
-                    videos.append(video)
+                    details_response = requests.get(details_url, params=details_params, timeout=30)
+                    if details_response.status_code == 200:
+                        details_data = details_response.json()
+                        details_map = {item['id']: item for item in details_data.get('items', [])}
+                        
+                        # Create video objects with statistics
+                        for video_id in batch_ids:
+                            item = video_items_map.get(video_id)
+                            if not item:
+                                continue
+                            snippet = item.get('snippet', {})
+                            details = details_map.get(video_id, {})
+                            stats = details.get('statistics', {})
+                            
+                            video = {
+                                'video_id': video_id,
+                                'title': snippet.get('title', 'Untitled'),
+                                'description': snippet.get('description', ''),
+                                'thumbnail': snippet.get('thumbnails', {}).get('high', {}).get('url', ''),
+                                'position': snippet.get('position', 0),
+                                'published_at': snippet.get('publishedAt', ''),
+                                'view_count': int(stats.get('viewCount', 0)),
+                                'like_count': int(stats.get('likeCount', 0)),
+                                'comment_count': int(stats.get('commentCount', 0))
+                            }
+                            videos.append(video)
+                    else:
+                        # Fallback: create videos without statistics
+                        for video_id in batch_ids:
+                            item = video_items_map.get(video_id)
+                            if not item:
+                                continue
+                            snippet = item.get('snippet', {})
+                            video = {
+                                'video_id': video_id,
+                                'title': snippet.get('title', 'Untitled'),
+                                'description': snippet.get('description', ''),
+                                'thumbnail': snippet.get('thumbnails', {}).get('high', {}).get('url', ''),
+                                'position': snippet.get('position', 0),
+                                'published_at': snippet.get('publishedAt', ''),
+                                'view_count': 0,
+                                'like_count': 0,
+                                'comment_count': 0
+                            }
+                            videos.append(video)
             
             next_page_token = data.get('nextPageToken')
             if not next_page_token:
@@ -366,7 +454,43 @@ def fetch_youtube_videos(api_key, channel_id=None, max_results=None):
                             import hashlib
                             content_id = int(hashlib.md5(video_id.encode()).hexdigest()[:8], 16) % 1000000
                             
-                            # Load space mapping if available
+                            # Analytics tracking file
+ANALYTICS_FILE = 'video_analytics.json'
+
+def load_analytics():
+    """Load video view analytics from file"""
+    if os.path.exists(ANALYTICS_FILE):
+        try:
+            with open(ANALYTICS_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_analytics(analytics):
+    """Save video view analytics to file"""
+    try:
+        with open(ANALYTICS_FILE, 'w') as f:
+            json.dump(analytics, f, indent=2)
+    except Exception as e:
+        print(f"Error saving analytics: {e}")
+
+def get_video_library_views(content_id):
+    """Get library view count for a video"""
+    analytics = load_analytics()
+    return analytics.get(str(content_id), {}).get('views', 0)
+
+def track_video_view(content_id):
+    """Track a video view"""
+    analytics = load_analytics()
+    video_id_str = str(content_id)
+    if video_id_str not in analytics:
+        analytics[video_id_str] = {'views': 0, 'last_viewed': None}
+    analytics[video_id_str]['views'] += 1
+    analytics[video_id_str]['last_viewed'] = datetime.now().isoformat()
+    save_analytics(analytics)
+
+# Load space mapping if available
                             space_name = snippet.get('channelTitle', 'StayCurrentMD')
                             try:
                                 import os
@@ -925,12 +1049,14 @@ except Exception as e:
 # API routes must come BEFORE catch-all routes
 @app.route('/api/playlists')
 def get_playlists():
-    """API endpoint to get all YouTube playlists"""
+    """API endpoint to get all YouTube playlists, ordered by video count (most common first)"""
     if not YOUTUBE_API_KEY or not YOUTUBE_CHANNEL_ID:
         return jsonify({'error': 'YouTube API not configured'}), 400
     
     try:
         playlists = fetch_youtube_playlists(YOUTUBE_API_KEY, YOUTUBE_CHANNEL_ID)
+        # Sort by video count (most common first)
+        playlists.sort(key=lambda x: x.get('video_count', 0), reverse=True)
         return jsonify({
             'playlists': playlists,
             'total': len(playlists)
@@ -946,6 +1072,24 @@ def get_playlist_videos(playlist_id):
     
     try:
         videos = fetch_playlist_videos(YOUTUBE_API_KEY, playlist_id)
+        
+        # Add library view counts and match with library videos
+        for video in videos:
+            video_id = video.get('video_id')
+            # Try to find matching video in library
+            matching_video = None
+            for v in all_videos:
+                if v.get('youtube_id') == video_id:
+                    matching_video = v
+                    break
+            
+            if matching_video:
+                # Get library view count
+                video['content_id'] = matching_video.get('content_id')
+                video['library_views'] = get_video_library_views(matching_video.get('content_id'))
+            else:
+                video['library_views'] = 0
+        
         return jsonify({
             'playlist_id': playlist_id,
             'videos': videos,
@@ -1492,18 +1636,26 @@ def get_space_videos(space_name):
     end = start + per_page
     paginated_videos = filtered_videos[start:end]
     
-    # Format videos for response
+    # Format videos for response - add library views and YouTube views
     video_list = []
     for video in paginated_videos:
+        content_id = video.get('content_id')
+        library_views = get_video_library_views(content_id) if content_id else 0
+        youtube_views = video.get('view_count', 0) if video.get('youtube_id') else 0
+        
         video_list.append({
-            'id': video.get('content_id'),
+            'id': content_id,
             'title': video.get('title', 'Untitled'),
             'description': video.get('description', ''),
             'file_path': video.get('file_path', ''),
             'thumbnail': video.get('thumbnail', ''),
             'hls_url': video.get('hls_url', ''),
-            'created_at': video.get('created_at', '')[:10] if video.get('created_at') else 'Unknown date',
-            'updated_at': video.get('updated_at', '')[:10] if video.get('updated_at') else 'Unknown date',
+            'created_at': video.get('created_at', ''),
+            'published_at': video.get('published_at', ''),
+            'library_views': library_views,
+            'youtube_views': youtube_views,
+            'view_count': youtube_views,
+            'youtube_id': video.get('youtube_id'),
             'space_name': video.get('space_name', 'Unknown Space')
         })
     

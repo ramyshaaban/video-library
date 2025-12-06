@@ -413,11 +413,10 @@
             border-radius: 2px;
             width: 100%;
         }
-        .video-id {
-            font-family: monospace;
-            background: #f0f0f0;
+        .video-date-views {
+            font-size: 12px;
+            color: #666;
             padding: 2px 6px;
-            border-radius: 4px;
         }
         .search-box {
             width: 100%;
@@ -549,6 +548,7 @@
             <div class="section-tabs">
                 <button class="tab-button active" id="spaces-tab" onclick="showSpacesTab()">Spaces</button>
                 <button class="tab-button" id="playlists-tab" onclick="showPlaylistsTab()">Playlists</button>
+                <button class="tab-button" id="microsites-tab" onclick="showMicrositesTab()">Microsites</button>
             </div>
             
             <div id="spaces-section">
@@ -559,6 +559,11 @@
             <div id="playlists-section" class="hidden">
                 <div class="loading" id="playlists-loading">Loading playlists...</div>
                 <div class="spaces-grid" id="playlists-grid"></div>
+            </div>
+            
+            <div id="microsites-section" class="hidden">
+                <div class="loading" id="microsites-loading">Loading microsites...</div>
+                <div class="spaces-grid" id="microsites-grid"></div>
             </div>
         </div>
         
@@ -649,24 +654,116 @@
         }
         
         // Load spaces
-        // Tab switching functions
-        function showSpacesTab() {
-            document.getElementById('spaces-tab').classList.add('active');
-            document.getElementById('playlists-tab').classList.remove('active');
-            document.getElementById('spaces-section').classList.remove('hidden');
-            document.getElementById('playlists-section').classList.add('hidden');
-        }
+        // Tab switching functions - showSpacesTab moved below
         
         function showPlaylistsTab() {
             document.getElementById('playlists-tab').classList.add('active');
             document.getElementById('spaces-tab').classList.remove('active');
+            document.getElementById('microsites-tab').classList.remove('active');
             document.getElementById('playlists-section').classList.remove('hidden');
             document.getElementById('spaces-section').classList.add('hidden');
+            document.getElementById('microsites-section').classList.add('hidden');
             
             // Load playlists if not already loaded
             if (document.getElementById('playlists-grid').children.length === 0) {
                 loadPlaylists();
             }
+        }
+        
+        function showMicrositesTab() {
+            document.getElementById('microsites-tab').classList.add('active');
+            document.getElementById('spaces-tab').classList.remove('active');
+            document.getElementById('playlists-tab').classList.remove('active');
+            document.getElementById('microsites-section').classList.remove('hidden');
+            document.getElementById('spaces-section').classList.add('hidden');
+            document.getElementById('playlists-section').classList.add('hidden');
+            
+            // Load microsites if not already loaded
+            if (document.getElementById('microsites-grid').children.length === 0) {
+                loadMicrosites();
+            }
+        }
+        
+        // Load and display microsites
+        async function loadMicrosites() {
+            const loadingEl = document.getElementById('microsites-loading');
+            const gridEl = document.getElementById('microsites-grid');
+            
+            try {
+                loadingEl.style.display = 'block';
+                gridEl.innerHTML = '';
+                
+                const response = await fetch(`${API_BASE}/api/microsites`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                loadingEl.style.display = 'none';
+                
+                if (!data.microsites || data.microsites.length === 0) {
+                    gridEl.innerHTML = '<div style="text-align: center; padding: 40px; color: #666;">No microsites found.</div>';
+                    return;
+                }
+                
+                // Render microsite cards
+                data.microsites.forEach(microsite => {
+                    const card = createMicrositeCard(microsite);
+                    gridEl.appendChild(card);
+                });
+            } catch (error) {
+                console.error('Error loading microsites:', error);
+                loadingEl.textContent = 'Error loading microsites: ' + error.message;
+                loadingEl.style.color = '#c33';
+            }
+        }
+        
+        // Create microsite card
+        function createMicrositeCard(microsite) {
+            const card = document.createElement('div');
+            card.className = 'space-card';
+            card.style.cursor = 'pointer';
+            
+            // Thumbnail
+            if (microsite.thumbnail) {
+                const thumbnail = document.createElement('img');
+                thumbnail.src = microsite.thumbnail;
+                thumbnail.alt = microsite.title;
+                thumbnail.style.cssText = 'width: 100%; height: 180px; object-fit: cover; border-radius: 8px; margin-bottom: 15px;';
+                thumbnail.onerror = function() {
+                    this.style.display = 'none';
+                };
+                card.appendChild(thumbnail);
+            }
+            
+            // Title
+            const title = document.createElement('div');
+            title.className = 'space-card-title';
+            title.textContent = microsite.title;
+            card.appendChild(title);
+            
+            // Video count
+            const count = document.createElement('div');
+            count.className = 'space-card-count';
+            count.textContent = `${microsite.video_count || 0} videos`;
+            card.appendChild(count);
+            
+            // Description
+            if (microsite.description) {
+                const desc = document.createElement('div');
+                desc.style.cssText = 'color: #666; font-size: 14px; margin-top: 10px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;';
+                desc.textContent = stripHtml(microsite.description);
+                card.appendChild(desc);
+            }
+            
+            // Click handler
+            card.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                window.location.href = `${API_BASE}/microsite/${microsite.slug}`;
+            });
+            
+            return card;
         }
         
         // Load and display playlists
@@ -797,6 +894,7 @@
                     // Create video object - we'll use YouTube ID route which will redirect to content_id if found
                     const video = {
                         id: playlistVideo.video_id, // Use YouTube ID - backend route will handle lookup
+                        content_id: playlistVideo.content_id || null,
                         youtube_id: playlistVideo.video_id,
                         title: playlistVideo.title,
                         description: playlistVideo.description || '',
@@ -804,7 +902,10 @@
                         youtube_embed_url: `https://www.youtube.com/embed/${playlistVideo.video_id}`,
                         youtube_url: `https://www.youtube.com/watch?v=${playlistVideo.video_id}`,
                         type: 'youtube',
-                        space_name: playlist.title
+                        space_name: playlist.title,
+                        published_at: playlistVideo.published_at,
+                        youtube_views: playlistVideo.view_count || 0,
+                        library_views: playlistVideo.library_views || 0
                     };
                     const card = createVideoCard(video);
                     gridEl.appendChild(card);
@@ -1468,10 +1569,37 @@
                 badge.textContent = video.space_name;
                 metaDiv.appendChild(badge);
             }
-            const idSpan = document.createElement('span');
-            idSpan.className = 'video-id';
-            idSpan.textContent = `ID: ${video.id} • ${video.created_at}`;
-            metaDiv.appendChild(idSpan);
+            // Date and views
+            const dateViewsSpan = document.createElement('span');
+            dateViewsSpan.className = 'video-date-views';
+            
+            // Format date - use published_at for YouTube, created_at for others
+            let dateText = '';
+            if (video.published_at) {
+                const date = new Date(video.published_at);
+                dateText = date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+            } else if (video.created_at) {
+                const date = new Date(video.created_at);
+                dateText = date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+            } else {
+                dateText = 'Date unknown';
+            }
+            
+            // Format view count
+            let viewsText = '';
+            const libraryViews = video.library_views || 0;
+            const youtubeViews = video.youtube_views || video.view_count || 0;
+            const totalViews = libraryViews + youtubeViews;
+            
+            if (totalViews > 0) {
+                viewsText = totalViews.toLocaleString() + ' views';
+                if (video.youtube_id && youtubeViews > 0 && libraryViews > 0) {
+                    viewsText = `${totalViews.toLocaleString()} views (${libraryViews.toLocaleString()} library + ${youtubeViews.toLocaleString()} YouTube)`;
+                }
+            }
+            
+            dateViewsSpan.textContent = dateText + (viewsText ? ' • ' + viewsText : '');
+            metaDiv.appendChild(dateViewsSpan);
             card.appendChild(metaDiv);
             
             // Make card clickable - navigate to new video page
