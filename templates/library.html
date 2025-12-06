@@ -793,13 +793,44 @@
                 }
                 
                 // Create video cards from playlist videos
-                data.videos.forEach(playlistVideo => {
-                    // Try to find video in library by YouTube ID via API
-                    // For now, create a video object that works with the card system
-                    // We'll use a special format for YouTube-only videos
+                // First, try to find videos in library by YouTube ID
+                const videoLookupPromises = data.videos.map(async (playlistVideo) => {
+                    try {
+                        // Try to find video in library by searching for YouTube ID
+                        // We'll search all videos via the search API or try to find by YouTube ID
+                        const searchResponse = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(playlistVideo.video_id)}&limit=100`);
+                        if (searchResponse.ok) {
+                            const searchData = await searchResponse.json();
+                            // Look for exact YouTube ID match
+                            const matchingVideo = searchData.videos?.find(v => 
+                                v.youtube_id === playlistVideo.video_id || 
+                                v.youtube_embed_url?.includes(playlistVideo.video_id)
+                            );
+                            if (matchingVideo && matchingVideo.content_id) {
+                                return {
+                                    ...playlistVideo,
+                                    content_id: matchingVideo.content_id,
+                                    found_in_library: true
+                                };
+                            }
+                        }
+                    } catch (error) {
+                        console.log('Error looking up video:', error);
+                    }
+                    return {
+                        ...playlistVideo,
+                        content_id: null,
+                        found_in_library: false
+                    };
+                });
+                
+                const videosWithLookup = await Promise.all(videoLookupPromises);
+                
+                // Create video cards
+                videosWithLookup.forEach(playlistVideo => {
                     const video = {
-                        id: `yt_${playlistVideo.video_id}`, // Special ID format for YouTube videos
-                        content_id: null, // No content_id for YouTube-only videos
+                        id: playlistVideo.found_in_library ? playlistVideo.content_id : `yt_${playlistVideo.video_id}`,
+                        content_id: playlistVideo.content_id,
                         title: playlistVideo.title,
                         description: playlistVideo.description || '',
                         thumbnail: playlistVideo.thumbnail,
@@ -807,7 +838,8 @@
                         youtube_embed_url: `https://www.youtube.com/embed/${playlistVideo.video_id}`,
                         youtube_url: `https://www.youtube.com/watch?v=${playlistVideo.video_id}`,
                         type: 'youtube',
-                        space_name: playlist.title
+                        space_name: playlist.title,
+                        found_in_library: playlistVideo.found_in_library
                     };
                     const card = createVideoCard(video);
                     gridEl.appendChild(card);
@@ -1485,17 +1517,24 @@
         
         // Navigate to video page with timestops/transcription
         function openVideoPage(video) {
-            // Check if this is a YouTube-only video (not in library)
-            if (video.type === 'youtube' && video.id && video.id.startsWith('yt_')) {
-                // For YouTube-only videos, open YouTube directly
-                const youtubeUrl = video.youtube_url || `https://www.youtube.com/watch?v=${video.youtube_id}`;
-                console.log('Opening YouTube video:', youtubeUrl);
-                window.open(youtubeUrl, '_blank');
+            // If video has content_id (numeric), use the standard video route
+            if (video.content_id && typeof video.content_id === 'number') {
+                const videoUrl = `${API_BASE}/video/${video.content_id}`;
+                console.log('Navigating to video library page (by content_id):', videoUrl, 'for video:', video.title);
+                window.location.href = videoUrl;
                 return;
             }
             
-            // Use the reliable video ID route - this always works
-            // The friendly URL route can be used for sharing, but ID route is more reliable for navigation
+            // For YouTube videos, use the YouTube ID route which will redirect to content_id if found in library
+            if (video.youtube_id || (video.type === 'youtube' && video.id)) {
+                const youtubeId = video.youtube_id || video.id;
+                const videoUrl = `${API_BASE}/video/youtube/${youtubeId}`;
+                console.log('Navigating to video library page (by YouTube ID):', videoUrl, 'for video:', video.title);
+                window.location.href = videoUrl;
+                return;
+            }
+            
+            // Fallback: use the video ID route
             const videoUrl = `${API_BASE}/video/${video.id}`;
             console.log('Navigating to video page:', videoUrl, 'for video:', video.title);
             window.location.href = videoUrl;

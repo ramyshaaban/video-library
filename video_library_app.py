@@ -1975,6 +1975,31 @@ def get_video_transcription(video_id):
             'message': 'Transcription not yet generated for this video'
         })
 
+@app.route('/video/youtube/<youtube_id>')
+@app.route('/videolibrary/video/youtube/<youtube_id>')
+def video_with_timestops_by_youtube_id(youtube_id):
+    """Video page accessed by YouTube ID - finds video in library and redirects to content_id route"""
+    # Find video by YouTube ID
+    video = None
+    for v in all_videos:
+        video_youtube_id = v.get('youtube_id') or (v.get('file_path', '').replace('youtube:', '') if v.get('file_path', '').startswith('youtube:') else None)
+        if video_youtube_id == youtube_id:
+            video = v
+            break
+    
+    if not video:
+        return jsonify({'error': 'Video not found in library'}), 404
+    
+    # Redirect to the content_id route
+    content_id = video.get('content_id')
+    if not content_id:
+        return jsonify({'error': 'Video has no content_id'}), 404
+    
+    base_path = request.headers.get('X-Forwarded-Prefix', '')
+    redirect_url = f"{base_path}/video/{content_id}" if base_path else f"/video/{content_id}"
+    from flask import redirect
+    return redirect(redirect_url, code=302)
+
 @app.route('/video/<int:video_id>')
 @app.route('/videolibrary/video/<int:video_id>')
 def video_with_timestops(video_id):
