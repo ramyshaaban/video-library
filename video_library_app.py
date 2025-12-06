@@ -454,43 +454,7 @@ def fetch_youtube_videos(api_key, channel_id=None, max_results=None):
                             import hashlib
                             content_id = int(hashlib.md5(video_id.encode()).hexdigest()[:8], 16) % 1000000
                             
-                            # Analytics tracking file
-ANALYTICS_FILE = 'video_analytics.json'
-
-def load_analytics():
-    """Load video view analytics from file"""
-    if os.path.exists(ANALYTICS_FILE):
-        try:
-            with open(ANALYTICS_FILE, 'r') as f:
-                return json.load(f)
-        except:
-            return {}
-    return {}
-
-def save_analytics(analytics):
-    """Save video view analytics to file"""
-    try:
-        with open(ANALYTICS_FILE, 'w') as f:
-            json.dump(analytics, f, indent=2)
-    except Exception as e:
-        print(f"Error saving analytics: {e}")
-
-def get_video_library_views(content_id):
-    """Get library view count for a video"""
-    analytics = load_analytics()
-    return analytics.get(str(content_id), {}).get('views', 0)
-
-def track_video_view(content_id):
-    """Track a video view"""
-    analytics = load_analytics()
-    video_id_str = str(content_id)
-    if video_id_str not in analytics:
-        analytics[video_id_str] = {'views': 0, 'last_viewed': None}
-    analytics[video_id_str]['views'] += 1
-    analytics[video_id_str]['last_viewed'] = datetime.now().isoformat()
-    save_analytics(analytics)
-
-# Load space mapping if available
+                            # Load space mapping if available
                             space_name = snippet.get('channelTitle', 'StayCurrentMD')
                             try:
                                 import os
