@@ -545,23 +545,23 @@
         </header>
         
         <div id="spaces-view">
-            <div class="section-tabs">
-                <button class="tab-button active" id="spaces-tab" onclick="showSpacesTab()">Spaces</button>
-                <button class="tab-button" id="playlists-tab" onclick="showPlaylistsTab()">Playlists</button>
-                <button class="tab-button" id="microsites-tab" onclick="showMicrositesTab()">Microsites</button>
-            </div>
-            
+            <!-- Spaces Section -->
             <div id="spaces-section">
+                <h2 class="section-title">Spaces</h2>
                 <div class="loading" id="spaces-loading">Loading spaces...</div>
                 <div class="spaces-grid" id="spaces-grid"></div>
             </div>
             
-            <div id="playlists-section" class="hidden">
+            <!-- Playlists Section -->
+            <div id="playlists-section">
+                <h2 class="section-title">Playlists</h2>
                 <div class="loading" id="playlists-loading">Loading playlists...</div>
                 <div class="spaces-grid" id="playlists-grid"></div>
             </div>
             
-            <div id="microsites-section" class="hidden">
+            <!-- Microsites Section -->
+            <div id="microsites-section">
+                <h2 class="section-title">Microsites</h2>
                 <div class="loading" id="microsites-loading">Loading microsites...</div>
                 <div class="spaces-grid" id="microsites-grid"></div>
             </div>
@@ -713,8 +713,8 @@
                 });
             } catch (error) {
                 console.error('Error loading microsites:', error);
-                loadingEl.textContent = 'Error loading microsites: ' + error.message;
-                loadingEl.style.color = '#c33';
+                loadingEl.style.display = 'none';
+                gridEl.innerHTML = '<div style="text-align: center; padding: 40px; color: #c33;">Error loading microsites: ' + error.message + '</div>';
             }
         }
         
@@ -795,8 +795,8 @@
                 });
             } catch (error) {
                 console.error('Error loading playlists:', error);
-                loadingEl.textContent = 'Error loading playlists: ' + error.message;
-                loadingEl.style.color = '#c33';
+                loadingEl.style.display = 'none';
+                gridEl.innerHTML = '<div style="text-align: center; padding: 40px; color: #c33;">Error loading playlists: ' + error.message + '</div>';
             }
         }
         
