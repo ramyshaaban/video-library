@@ -487,38 +487,19 @@
             display: none;
         }
         /* Views are controlled by the 'hidden' class, not CSS rules */
-        .section-tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 30px;
-            background: white;
-            padding: 10px;
-            border-radius: 10px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        .section-title {
+            font-size: 24px;
+            font-weight: 500;
+            color: #202124;
+            margin: 40px 0 20px 0;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e8eaed;
         }
-        .tab-button {
-            flex: 1;
-            padding: 15px 30px;
-            border: 2px solid #e0e0e0;
-            background: white;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            color: #666;
-        }
-        .tab-button:hover {
-            border-color: #667eea;
-            color: #667eea;
-        }
-        .tab-button.active {
-            background: #667eea;
-            color: white;
-            border-color: #667eea;
-        }
-        #spaces-section, #playlists-section {
+        .section-title:first-of-type {
             margin-top: 20px;
+        }
+        #spaces-section, #playlists-section, #microsites-section {
+            margin-bottom: 40px;
         }
     </style>
 </head>
@@ -640,47 +621,19 @@
             // Keeping this check to prevent errors if referenced elsewhere
         }
         
-        // Initialize
+        // Initialize - load all sections
         async function init() {
             try {
                 document.getElementById('last-updated').textContent = new Date().toLocaleDateString();
-                await loadSpaces();
+                // Load all sections in parallel
+                await Promise.all([
+                    loadSpaces(),
+                    loadPlaylists(),
+                    loadMicrosites()
+                ]);
             } catch (error) {
                 console.error('Initialization error:', error);
-                document.getElementById('spaces-loading').textContent = 'Error loading spaces. Please refresh the page.';
-                document.getElementById('spaces-loading').style.color = '#c33';
                 showError('Failed to load library: ' + error.message);
-            }
-        }
-        
-        // Load spaces
-        // Tab switching functions - showSpacesTab moved below
-        
-        function showPlaylistsTab() {
-            document.getElementById('playlists-tab').classList.add('active');
-            document.getElementById('spaces-tab').classList.remove('active');
-            document.getElementById('microsites-tab').classList.remove('active');
-            document.getElementById('playlists-section').classList.remove('hidden');
-            document.getElementById('spaces-section').classList.add('hidden');
-            document.getElementById('microsites-section').classList.add('hidden');
-            
-            // Load playlists if not already loaded
-            if (document.getElementById('playlists-grid').children.length === 0) {
-                loadPlaylists();
-            }
-        }
-        
-        function showMicrositesTab() {
-            document.getElementById('microsites-tab').classList.add('active');
-            document.getElementById('spaces-tab').classList.remove('active');
-            document.getElementById('playlists-tab').classList.remove('active');
-            document.getElementById('microsites-section').classList.remove('hidden');
-            document.getElementById('spaces-section').classList.add('hidden');
-            document.getElementById('playlists-section').classList.add('hidden');
-            
-            // Load microsites if not already loaded
-            if (document.getElementById('microsites-grid').children.length === 0) {
-                loadMicrosites();
             }
         }
         
